@@ -33,12 +33,22 @@ Keeps everything safe, professional, and aligned with bank policies—because, y
 Use LangGraph (or a similar framework) inside a Jupyter Notebook to make these LLMs work together like a dream team.
 Each LLM can be any model of your choice (but please, remove API keys from your code before you submit—let’s not accidentally leak secrets, shall we?).
 
-The system should check if at least two out of three details match before proceeding.
+The system should check if at least two out of three details match before proceeding with the secret question/answer. Create also another dict with account details to check if the client is premium, regular or non client.
+
 ```python
 example_of_user = {
   "name": "Lisa",
   "phone": "+1122334455",
-  "IBAN": "DE89370400440532013000"
+  "iban": "DE89370400440532013000",
+  "secret" : "Which is the name of my dog?",
+  "answer" : "Yoda"
+}
+```
+
+```python
+example_of_account = {
+  "iban": "DE89370400440532013000",
+  "premiun" : True
 }
 ```
 **Responses examples(yours could be different but take care of user data leaks):**
@@ -69,8 +79,8 @@ As you can see the phone is not leaked to non clients, premiun ones has differen
 ```
 
 **Deliverables**
-1. A diagram (like the example) to visually show how your system works.
 ![Graph example](lang-graph.png?raw=true "Graph example")
+1. A diagram (like the example) to visually show how your system works.
 2. A Pull Request in the repo with your final solution.
 3. Realistic commits – because in the real world, we don’t just push all our code in one commit named final_version_for_real_this_time.py.
 

@@ -8,21 +8,21 @@ In this challenge, you'll build an AI-powered customer support system where mult
 
 Here's how our dream team of AI agents rolls:
 
-Agent 1 – The Greeter
+**Agent 1 – The Greeter**
 
 This LLM is the friendly face (well, metaphorically speaking) of the bank.
 It starts the conversation, asks for identification, and makes sure the customer isn’t just a prank caller trying to mess with the system.
 
-Agent 2 – The Bouncer
+**Agent 2 – The Bouncer**
 
 Once Agent 1 verifies the customer, Agent 2 steps in like a VIP club bouncer.
 It decides: Regular customer? Premium client? Or... wait, are they even a customer at all?!
 
-Agent 3 – The Specialist 
+**Agent 3 – The Specialist**
 
 If the customer has a specific request (like “Help me with my yacht insurance” 🛥️), this LLM makes sure they get the right expert.
 
-GuardrailsAI – The Rule Enforcer
+**GuardrailsAI – The Rule Enforcer**
 
 Keeps everything safe, professional, and aligned with bank policies—because, you know, we don’t want an AI accidentally approving million-dollar loans to random strangers.
 
@@ -40,25 +40,32 @@ example_of_user = {
   "phone": "+1122334455",
   "IBAN": "DE89370400440532013000"
 }
+```
+**Responses examples(yours could be different but take care of user data leaks):**
 
-```java
-Example Workflow:
+As you can see the phone is not leaked to non clients, premiun ones has different phone and regular clients doesnt have access to those phones.
 
-Scene: A customer needs help. Our AI squad is on it!
+```python
+# Premium client
+# Thank you for reaching out regarding your account issue. 
+# As a premium client, we value your experience and are here to assist you.
+# For immediate support, please contact our dedicated support department at +1999888999. 
+# They will be able to help you promptly and ensure your account is functioning smoothly. Thank you for your patience and understanding.
+```
 
-Customer: "I need help with my account."
+```python
+# Regular client
+# I'm sorry to hear that you're having trouble with your account. 
+# Since you're a regular client, I recommend that you call our support department at +1112112112 for assistance. 
+# They will be able to help you resolve the issue promptly. Thank you for your understanding!
+```
 
-Agent 1: “Sure! Can you provide your account number and verify your identity?”
-
-Customer: (Provides details)
-
-Agent 1: “Thank you! Your identity has been verified.”
-
-Agent 2: (Checks status) – “Ooooh, fancy! You’re a premium customer. Redirecting you to our VIP team…”
-
-Agent 3: “Oh, I see you need help with wealth management. Let me connect you with an advisor!”
-
-Final step: The customer is smoothly connected to the right department, no rage-quitting required.
+```python
+# Non client
+# Thank you for reaching out.
+# It seems that you are not currently a client of DEUS Bank. 
+# I recommend that you contact your bank's support department directly for assistance with your account issue. 
+# They will be able to provide you with the help you need.
 ```
 
 **Deliverables**
@@ -72,8 +79,8 @@ Final step: The customer is smoothly connected to the right department, no rage-
 
 Want extra credit (and bragging rights)? Try these:
 
-Give your AI a voice – because robotic monotone chat is so last decade.
-Use fancy guardrails – extra security, extra cool.
-Make the AI remember past conversations – because forgetting customers is just rude.
+1. Give your AI a voice – because robotic monotone chat is so last decade.
+2. Use fancy guardrails – extra security, extra cool.
+3. Make the AI remember past conversations – because forgetting customers is just rude.
 
 Now, go forth and build the most epic AI-powered customer support ever! 🚀

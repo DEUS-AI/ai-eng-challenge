@@ -69,7 +69,8 @@ As you can see the phone is not leaked to non clients, premiun ones has differen
 ```
 
 **Deliverables**
-1. A diagram (like the example) to visually show how your system works. //insert image here
+1. A diagram (like the example) to visually show how your system works.
+![Graph example](lang-graph.png?raw=true "Graph example")
 2. A Pull Request in the repo with your final solution.
 3. Realistic commits – because in the real world, we don’t just push all our code in one commit named final_version_for_real_this_time.py.
 

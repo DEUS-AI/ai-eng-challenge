@@ -82,7 +82,7 @@ As you can see the phone is not leaked to non clients, premiun ones has differen
 ![Graph example](lang-graph.png?raw=true "Graph example")
 1. A diagram (like the example) to visually show how your system works.
 2. Working code with unit tests of the cells.
-3. A Pull Request in the repo with the features. Use GitFlow or similar approach to create the branches.
+3. A Pull Request or several Pull Requests in the repo with the features. Use GitFlow or similar approach to create the branches.
 4. Realistic commits – because in the real world, we don’t just push all our code in one commit named final_version_for_real_this_time.py.
 5. Your solution should be uploaded and submitted using this repo as base (download, clone, fork is not allowed).
 

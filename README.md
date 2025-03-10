@@ -22,7 +22,7 @@ It decides: Regular customer? Premium client? Or... wait, are they even a custom
 
 If the customer has a specific request (like “Help me with my yacht insurance” 🛥️), this LLM makes sure they get the right expert.
 
-**GuardrailsAI – The Rule Enforcer**
+**Guardrails – The Rule Enforcer**
 
 Keeps everything safe, professional, and aligned with bank policies—because, you know, we don’t want an AI accidentally approving million-dollar loans to random strangers.
 

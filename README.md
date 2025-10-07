@@ -28,6 +28,7 @@ Here’s what you need to build and how to deliver it.
 -   **🏗️ Framework & Structure**: You are free to use `LangGraph` or a similar framework. While a Jupyter Notebook is an acceptable format, remember that the overall structure and design of your solution will be a key part of the evaluation.
 -   **🧠 LLM Choice**: You can use any LLM you prefer. Just remember to remove your API keys before submitting!
 -   **⚙️ Core Logic**: The system must verify a customer by matching at least **two out of three** details (`name`, `phone`, `iban`) before asking their secret question.
+-   **🚀 API Endpoint**: To simulate a real-world application, expose your solution via a `FastAPI` endpoint.
 
 <br>
 
@@ -88,5 +89,8 @@ Want to go the extra mile? Consider exploring these optional extensions:
 -   **🗣️ Add a Voice Interface**: Integrate text-to-speech (TTS) and speech-to-text (STT) to give your AI a voice.
 -   **🔒 Implement Advanced Guardrails**: Add more sophisticated safety mechanisms to prevent harmful, off-topic, or irrelevant responses.
 -   **📚 Incorporate Conversation History**: Give your system memory to allow for more natural, context-aware conversations.
+-   **🧪 Add Comprehensive Testing**: Implement a robust testing suite to ensure code quality and reliability.
+-   **🚀 Implement CI/CD**: Set up a continuous integration and deployment pipeline to automate testing and releases.
+-   **🐳 Dockerize the Application**: Package the solution into a Docker container for easy deployment and scalability.
 
 Now, go forth and build the most epic AI-powered customer support ever! 🚀

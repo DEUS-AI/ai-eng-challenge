@@ -94,3 +94,9 @@ Want to go the extra mile? Consider exploring these optional extensions:
 -   **🐳 Dockerize the Application**: Package the solution into a Docker container for easy deployment and scalability.
 
 Now, go forth and build the most epic AI-powered customer support ever! 🚀
+
+---
+
+## Solution
+
+See [SOLUTION.md](SOLUTION.md) for the full implementation documentation, including architecture, setup instructions, API usage, and design decisions.

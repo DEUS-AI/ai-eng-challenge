@@ -10,35 +10,12 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from src.database import Customer, find_customer_by_identifiers
+from src.prompts import load_prompt
 from src.schemas import ConversationState
 
 MAX_SECRET_ATTEMPTS = 3
 
-BOUNCER_VERIFY_PROMPT = """You are a bank security verification agent for DEUS Bank.
-A customer has provided identification details and you need to verify them.
-
-The customer provided:
-- Name: {name}
-- Phone: {phone}
-- IBAN: {iban}
-
-Verification result: {verification_result}
-
-{secret_instruction}
-
-Rules:
-- Be professional and security-conscious
-- Do NOT reveal which specific fields matched or didn't match
-- Do NOT reveal other customers' information
-- If verification failed, politely inform them and suggest contacting their bank
-- If asking the secret question, ask it naturally without revealing the expected answer
-
-Respond with JSON:
-- verified: whether identity is verified (true only after correct secret answer)
-- tier: "premium", "regular", or "non_client"
-- secret_correct: true/false if checking an answer, null if not applicable
-- message: your response to the customer
-"""
+BOUNCER_VERIFY_PROMPT = load_prompt("bouncer_verify")
 
 
 class BouncerOutput(BaseModel):
@@ -130,19 +107,10 @@ def _check_secret_answer(
             break
 
     # Use LLM to check if answer is semantically correct
-    system_prompt = f"""You are a bank security verification agent. Check if the customer's answer matches.
-
-The secret question is: "{customer.secret_question}"
-The correct answer is: "{customer.secret_answer}"
-
-Consider case-insensitive matching and minor variations.
-
-Respond with JSON:
-- verified: true if the answer is correct
-- tier: null
-- secret_correct: true if answer matches, false otherwise
-- message: your response to the customer
-"""
+    system_prompt = load_prompt("bouncer_secret_check").format(
+        secret_question=customer.secret_question,
+        secret_answer=customer.secret_answer,
+    )
 
     from langchain_core.messages import HumanMessage
     messages = [SystemMessage(content=system_prompt), HumanMessage(content=f"The customer answered: {last_user_msg}")]

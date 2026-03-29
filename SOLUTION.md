@@ -77,6 +77,17 @@ uv run uvicorn src.app:app --reload
 
 Server starts at `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
 
+### Run with Docker
+
+```bash
+# Build and start
+docker compose up --build
+
+# Or build manually
+docker build -t deus-bank-support .
+docker run -p 8000:8000 --env-file .env deus-bank-support
+```
+
 ### Test
 
 ```bash

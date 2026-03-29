@@ -46,7 +46,7 @@ graph TD
 | LLM | Gemini Flash via AI Studio |
 | API | FastAPI |
 | Data store | SQLite |
-| Testing | pytest (66 unit tests + 3 E2E scenarios) |
+| Testing | pytest (77 unit/API tests + 6 E2E scenarios) |
 
 ## Setup
 
@@ -180,19 +180,22 @@ tests/
   test_database.py    # 22 tests: matching logic, normalization
   test_agents.py      # 9 tests: output schemas, constants
   test_guardrails.py  # 35 tests: injection detection, PII leakage, helpers
-  test_e2e.py         # 3 E2E scenarios: premium, regular, non-client
+  test_e2e.py         # 6 E2E scenarios: injection, non-client, failed-secret, premium, regular, partial-id
   e2e_reports/        # Saved conversation transcripts from E2E runs
 ```
 
 ## E2E Test Results
 
-Three scenarios validated against the real Gemini API:
+Six scenarios validated against the real Gemini API:
 
 | Scenario | Turns | Tier | Department | Support Number | Result |
 |----------|-------|------|-----------|---------------|--------|
+| Injection blocked | 1 | - | - | None leaked | PASS |
 | Non-client (Bob Nobody) | 2 | non_client | - | None leaked | PASS |
-| Premium (Lisa) | 4 | premium | insurance | +1999888999 | PASS |
+| Failed secret (Lisa, 3 wrong) | 5 | non_client | - | None leaked | PASS |
+| Premium (Lisa, 3/3 fields) | 4 | premium | insurance | +1999888999 | PASS |
 | Regular (Anna Schmidt) | 4 | regular | general | +1112112112 | PASS |
+| Partial ID (Lisa, 2/3 fields) | 4 | premium | loans | +1999888999 | PASS |
 
 Reports saved in `tests/e2e_reports/`.
 

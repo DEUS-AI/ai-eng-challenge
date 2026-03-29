@@ -182,6 +182,12 @@ src/
     greeter.py        # Greeter agent + GreeterOutput schema
     bouncer.py        # Bouncer agent + BouncerOutput schema
     specialist.py     # Specialist agent + SpecialistOutput schema
+  prompts/
+    greeter.txt       # Greeter system prompt
+    bouncer_verify.txt       # Bouncer identity verification prompt
+    bouncer_secret_check.txt # Bouncer secret answer check prompt
+    specialist.txt    # Specialist routing prompt
+    pii_retry.txt     # PII retry correction instruction
   guardrails.py       # Input guard + output policy + PII retry logic
   graph.py            # LangGraph builder + conditional edges
   database.py         # SQLite setup, seed data, Customer model, lookups

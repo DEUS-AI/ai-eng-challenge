@@ -180,6 +180,7 @@ tests/
   test_database.py    # 22 tests: matching logic, normalization
   test_agents.py      # 9 tests: output schemas, constants
   test_guardrails.py  # 35 tests: injection detection, PII leakage, helpers
+  test_api.py         # 11 tests: HTTP routing, sessions, error handling
   test_e2e.py         # 6 E2E scenarios: injection, non-client, failed-secret, premium, regular, partial-id
   e2e_reports/        # Saved conversation transcripts from E2E runs
 ```

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -14,17 +16,37 @@ from src.database import init_db, seed_db
 from src.graph import build_graph
 from src.guardrails import check_input
 
+logger = logging.getLogger(__name__)
+
 load_dotenv()
+
+# Global state
+_graph = None
+_db_conn = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _graph, _db_conn
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY environment variable is required")
+
+    _db_conn = init_db()
+    seed_db(_db_conn)
+    _graph = build_graph(db_conn=_db_conn, api_key=api_key)
+    yield
+    # Cleanup
+    if _db_conn:
+        _db_conn.close()
+
 
 app = FastAPI(
     title="DEUS Bank AI Customer Support",
     description="Multi-agent customer support system powered by LangGraph and Gemini",
     version="0.1.0",
+    lifespan=lifespan,
 )
-
-# Global state
-_graph = None
-_db_conn = None
 
 
 class StartResponse(BaseModel):
@@ -40,18 +62,6 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     phase: str
-
-
-@app.on_event("startup")
-def startup() -> None:
-    global _graph, _db_conn
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY environment variable is required")
-
-    _db_conn = init_db()
-    seed_db(_db_conn)
-    _graph = build_graph(db_conn=_db_conn, api_key=api_key)
 
 
 @app.get("/health")
@@ -88,10 +98,11 @@ def start_chat() -> StartResponse:
         result = _graph.invoke(initial_state, config=config)
         last_ai_msg = _get_last_ai_message(result)
         return StartResponse(session_id=session_id, message=last_ai_msg)
-    except Exception:
+    except Exception as e:
+        logger.exception("Error starting conversation")
         raise HTTPException(
             status_code=500,
-            detail="An error occurred starting the conversation. Please try again.",
+            detail=f"An error occurred starting the conversation: {type(e).__name__}",
         )
 
 
@@ -130,10 +141,11 @@ def send_message(request: ChatRequest) -> ChatResponse:
         last_ai_msg = _get_last_ai_message(result)
         current_phase = result.get("phase", phase)
         return ChatResponse(message=last_ai_msg, phase=current_phase)
-    except Exception:
+    except Exception as e:
+        logger.exception("Error processing message")
         raise HTTPException(
             status_code=500,
-            detail="An error occurred processing your message. Please try again.",
+            detail=f"An error occurred processing your message: {type(e).__name__}",
         )
 
 

@@ -46,7 +46,7 @@ graph TD
 | LLM | Gemini Flash via AI Studio |
 | API | FastAPI |
 | Data store | SQLite |
-| Testing | pytest (66 unit tests + 3 E2E scenarios) |
+| Testing | pytest (77 unit/API tests + 3 E2E scenarios) |
 
 ## Setup
 
@@ -180,6 +180,7 @@ tests/
   test_database.py    # 22 tests: matching logic, normalization
   test_agents.py      # 9 tests: output schemas, constants
   test_guardrails.py  # 35 tests: injection detection, PII leakage, helpers
+  test_api.py         # 11 tests: HTTP routing, sessions, error handling
   test_e2e.py         # 3 E2E scenarios: premium, regular, non-client
   e2e_reports/        # Saved conversation transcripts from E2E runs
 ```

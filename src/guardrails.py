@@ -14,6 +14,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, SystemMessage
 from pydantic import BaseModel
 
+from src.prompts import load_prompt
 from src.schemas import ConversationState
 
 # ---------------------------------------------------------------------------
@@ -56,11 +57,7 @@ IBAN_PATTERN = re.compile(r"[A-Z]{2}\d{2}[A-Z0-9\s]{10,30}", re.IGNORECASE)
 
 MAX_PII_RETRIES = 3
 
-PII_RETRY_INSTRUCTION = (
-    "Your previous response contained sensitive data (phone numbers or IBANs). "
-    "This is NOT allowed. Rewrite your response WITHOUT including any phone numbers "
-    "or IBAN values. Say 'I have your phone number on file' instead of repeating it."
-)
+PII_RETRY_INSTRUCTION = load_prompt("pii_retry")
 
 
 def check_input(message: str) -> str | None:

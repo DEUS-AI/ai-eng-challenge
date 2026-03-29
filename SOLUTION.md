@@ -200,6 +200,16 @@ Six scenarios validated against the real Gemini API:
 
 Reports saved in `tests/e2e_reports/`.
 
+## CI/CD
+
+GitHub Actions runs on every push and PR to `main`/`dev`:
+
+- Installs dependencies with uv
+- Runs 77 unit/API tests
+- Verifies the LangGraph compiles correctly
+
+See `.github/workflows/ci.yml`.
+
 ## Known Limitations
 
 1. **No rate limiting** — Brute-force verification attempts are possible

@@ -12,9 +12,13 @@ from fastapi import FastAPI, HTTPException
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
+from langgraph.checkpoint.sqlite import SqliteSaver
+
 from src.database import init_db, seed_db
 from src.graph import build_graph
 from src.guardrails import check_input
+
+CONVERSATIONS_DB = "conversations.db"
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +38,12 @@ async def lifespan(app: FastAPI):
 
     _db_conn = init_db()
     seed_db(_db_conn)
-    _graph = build_graph(db_conn=_db_conn, api_key=api_key)
-    yield
+
+    # SqliteSaver persists conversation state across server restarts
+    with SqliteSaver.from_conn_string(CONVERSATIONS_DB) as checkpointer:
+        _graph = build_graph(db_conn=_db_conn, api_key=api_key, checkpointer=checkpointer)
+        yield
+
     # Cleanup
     if _db_conn:
         _db_conn.close()

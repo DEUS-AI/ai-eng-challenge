@@ -7,6 +7,7 @@ from functools import partial
 from typing import Literal
 
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
@@ -40,6 +41,7 @@ def build_graph(
     db_conn: sqlite3.Connection,
     model_name: str = "gemini-2.5-flash",
     api_key: str | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
 ) -> StateGraph:
     """Build and compile the agent graph."""
     llm_kwargs = {"model": model_name, "temperature": 0}
@@ -74,6 +76,6 @@ def build_graph(
     # - bouncer -> specialist (verified) or output_policy (non-client/failed) or bouncer (retry)
     # - specialist -> output_policy (always)
 
-    # Compile with memory checkpointer for session persistence
-    memory = MemorySaver()
-    return builder.compile(checkpointer=memory)
+    # Compile with checkpointer for session persistence
+    # Defaults to in-memory; use SqliteSaver for persistence across restarts
+    return builder.compile(checkpointer=checkpointer or MemorySaver())

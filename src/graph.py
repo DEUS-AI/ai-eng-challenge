@@ -20,11 +20,8 @@ from src.schemas import ConversationState
 
 def _route_after_input_guard(state: ConversationState) -> Literal["greeter", "bouncer", "specialist", "__end__"]:
     """Route based on whether the input guard blocked the message and current phase."""
-    # If the guard added an AI refusal message, end the turn
-    if state["messages"] and hasattr(state["messages"][-1], "type") and state["messages"][-1].type == "ai":
-        last_content = state["messages"][-1].content
-        if "I can only assist with DEUS Bank" in last_content:
-            return "__end__"
+    if state.get("input_blocked", False):
+        return "__end__"
 
     phase = state.get("phase", "greeting")
     if phase == "greeting":

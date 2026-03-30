@@ -16,7 +16,6 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from src.database import init_db, seed_db
 from src.graph import build_graph
-from src.guardrails import check_input
 
 CONVERSATIONS_DB = "conversations.db"
 
@@ -100,6 +99,10 @@ def start_chat() -> StartResponse:
         "customer_tier": None,
         "department": None,
         "support_number": None,
+        "input_blocked": False,
+        "last_activity_ts": None,
+        "injection_attempts": 0,
+        "lockout_until": None,
     }
 
     try:

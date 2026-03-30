@@ -26,3 +26,9 @@ class ConversationState(TypedDict):
     # Specialist outputs
     department: str | None
     support_number: str | None
+
+    # Guardrails state
+    input_blocked: bool
+    last_activity_ts: float | None
+    injection_attempts: int
+    lockout_until: float | None

@@ -66,6 +66,10 @@ def _make_initial_state(thread_id: str, first_message: str) -> dict:
         "customer_tier": None,
         "department": None,
         "support_number": None,
+        "input_blocked": False,
+        "last_activity_ts": None,
+        "injection_attempts": 0,
+        "lockout_until": None,
     }
 
 

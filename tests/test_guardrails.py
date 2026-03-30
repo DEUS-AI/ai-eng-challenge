@@ -5,7 +5,7 @@ import pytest
 from src.guardrails import (
     GUARD_REFUSAL,
     POLICY_FALLBACK,
-    check_input,
+    check_injection,
     check_output,
     contains_pii,
     redact_pii,
@@ -33,7 +33,7 @@ class TestInputGuard:
         ],
     )
     def test_blocks_injection_attempts(self, message: str) -> None:
-        result = check_input(message)
+        result = check_injection(message)
         assert result == GUARD_REFUSAL, f"Should block: {message}"
 
     @pytest.mark.parametrize(
@@ -52,7 +52,7 @@ class TestInputGuard:
         ],
     )
     def test_allows_legitimate_messages(self, message: str) -> None:
-        result = check_input(message)
+        result = check_injection(message)
         assert result is None, f"Should allow: {message}"
 
 

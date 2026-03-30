@@ -82,8 +82,8 @@ def _ask_secret_question(
     )
 
     messages = [SystemMessage(content=prompt)] + state["messages"]
-    structured_llm = llm.with_structured_output(BouncerOutput)
-    result: BouncerOutput = structured_llm.invoke(messages)
+    from src.guardrails import invoke_with_pii_guard
+    result: BouncerOutput = invoke_with_pii_guard(llm, messages, BouncerOutput)
 
     return Command(
         update={

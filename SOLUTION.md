@@ -29,14 +29,23 @@ graph TD
 | **Bouncer** | Verifies 2/3 identity match, asks secret question (3 attempts), classifies tier | Identifiers | Verification result + tier |
 | **Specialist** | Classifies request into department, provides support number | Verified user + request | Department + phone number |
 
-### Guardrails Pipeline (Three-Tier PII Protection)
+### Guardrails Pipeline (6 Layers)
 
-1. **Input Guard** — Regex pattern matching for 12 prompt injection patterns (role-play, instruction override, system prompt extraction)
-2. **Structured Outputs** — Pydantic schemas constrain each agent's response format
-3. **Output Policy** — Three-tier defense for PII protection:
-   - **Prompt enforcement** — Agent system prompts explicitly forbid echoing phone numbers or IBANs
-   - **LLM retry** — If PII is detected in the response, the LLM is re-invoked with a correction instruction (up to 3 retries)
-   - **Redaction fallback** — After retries exhausted, PII is silently stripped with `[REDACTED]`
+Every user message passes through these layers in order (cheapest first, <5ms total):
+
+1. **Input length validation** — Reject messages over 2,000 characters
+2. **Unicode normalization** — Strip zero-width/bidi characters, NFKD→NFC normalize, detect base64-encoded injection payloads
+3. **Session timeout** — Expire sessions after 15 minutes of inactivity
+4. **Rate limiting** — Per-session lockout after 3 injection attempts (exponential backoff, max 10 min)
+5. **Injection detection** — 17 regex patterns covering instruction override, role-play, system prompt extraction, and social engineering
+6. **Topic guardrail** — Phase-aware; only blocks off-topic messages during the routing phase (skipped during greeting/verification where users send names, IBANs, secret answers)
+
+**Output protection (three-tier PII defense):**
+- **Prompt enforcement** — Agent system prompts explicitly forbid echoing phone numbers or IBANs
+- **LLM retry** — If PII detected in response, re-invoke with correction instruction (up to 3 retries)
+- **Redaction fallback** — After retries exhausted, silently strip PII with `[REDACTED]`
+
+**Structured outputs** — Pydantic schemas constrain each agent's response format
 
 ### Tech Stack
 
@@ -46,7 +55,7 @@ graph TD
 | LLM | Gemini Flash via AI Studio |
 | API | FastAPI |
 | Data store | SQLite |
-| Testing | pytest (77 unit/API tests + 6 E2E scenarios) |
+| Testing | pytest (154 unit/API/adversarial tests + 6 E2E scenarios) |
 
 ## Setup
 
@@ -196,8 +205,9 @@ src/
 tests/
   test_database.py    # 22 tests: matching logic, normalization
   test_agents.py      # 9 tests: output schemas, constants
-  test_guardrails.py  # 35 tests: injection detection, PII leakage, helpers
-  test_api.py         # 11 tests: HTTP routing, sessions, error handling
+  test_guardrails.py           # 35 tests: injection detection, PII leakage, helpers
+  test_guardrails_adversarial.py  # 77 tests: encoding bypass, social engineering, rate limiting, timeout, topic, false positive benchmark
+  test_api.py                 # 11 tests: HTTP routing, sessions, error handling
   test_e2e.py         # 6 E2E scenarios: injection, non-client, failed-secret, premium, regular, partial-id
   e2e_reports/        # Saved conversation transcripts from E2E runs
 ```
@@ -233,8 +243,9 @@ Conversation state is persisted to SQLite (`conversations.db`) via LangGraph's `
 
 ## Known Limitations
 
-1. **No rate limiting** — Brute-force verification attempts are possible
-2. **Oracle attack** — Reaching the secret question stage confirms 2/3 identifiers are valid
-3. **English only** — No multilingual support
-4. **No session timeout** — Sessions persist indefinitely
+1. **No homoglyph detection** — Cyrillic "e" for Latin "e" not caught (needs `confusable_homoglyphs` library)
+2. **English-only injection detection** — Multi-language injection patterns not implemented
+3. **Per-session rate limiting only** — Session rotation bypasses limits (needs IP-based middleware for full protection)
+4. **Oracle attack** — Reaching the secret question stage confirms 2/3 identifiers are valid
 5. **First-match only** — If multiple records match 2/3 identifiers, the first is used
+6. **Lazy session timeout** — Expired sessions cleaned up on next access, not proactively

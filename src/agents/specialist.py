@@ -11,13 +11,6 @@ from pydantic import BaseModel
 from src.prompts import load_prompt
 from src.schemas import ConversationState
 
-DEPARTMENTS = {
-    "loans": ["loan", "mortgage", "credit", "financing"],
-    "cards": ["card", "visa", "mastercard", "debit"],
-    "insurance": ["insurance", "coverage", "policy", "claim"],
-    "general": ["account", "balance", "transfer", "statement"],
-}
-
 SUPPORT_NUMBERS = {
     "premium": "+1999888999",
     "regular": "+1112112112",

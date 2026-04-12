@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
+from src.guardrails import invoke_with_pii_guard
 from src.prompts import load_prompt
 from src.schemas import ConversationState
 
@@ -45,7 +46,6 @@ def greeter_node(state: ConversationState, llm) -> Command[Literal["output_polic
         context = "Already collected: " + ", ".join(collected)
         messages.insert(1, SystemMessage(content=context))
 
-    from src.guardrails import invoke_with_pii_guard
     result: GreeterOutput = invoke_with_pii_guard(llm, messages, GreeterOutput)
 
     # Merge newly extracted info with previously collected

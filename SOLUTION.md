@@ -6,20 +6,20 @@ The system uses a **linear LangGraph state machine** with three specialized agen
 
 ```mermaid
 graph TD
-    A[__start__] --> B[input_guard]
+    A[__start__] --> B[input_guard<br/>length · normalize · timeout<br/>rate limit · injection · topic]
+    B -->|blocked| R[refusal / lockout]
     B -->|clean| C{phase?}
-    B -->|blocked| R1[refusal response]
     C -->|greeting| D[greeter]
     C -->|verification| E[bouncer]
     C -->|routing| F[specialist]
-    D -->|collecting| D
-    D -->|all collected| E
-    E -->|verified| F
-    E -->|non-client / failed| R2[rejection]
-    F --> G[__end__]
-    R1 --> G
-    R2 --> G
+    D --> OP[output_policy<br/>PII detect · retry · redact]
+    E --> OP
+    F --> OP
+    R --> G[__end__]
+    OP --> G
 ```
+
+Each `graph.invoke()` processes exactly one turn: `input_guard → agent → output_policy → end`. The `phase` field in state routes the next message to the correct agent. Agents update state and phase via `Command(update=..., goto="output_policy")`.
 
 ### Agents
 
@@ -55,7 +55,7 @@ Every user message passes through these layers in order (cheapest first, <5ms to
 | LLM | Gemini Flash via AI Studio |
 | API | FastAPI |
 | Data store | SQLite |
-| Testing | pytest (154 unit/API/adversarial tests + 6 E2E scenarios) |
+| Testing | pytest (166 unit/API/adversarial tests + 6 E2E scenarios) |
 
 ## Setup
 
@@ -206,7 +206,7 @@ tests/
   test_database.py    # 22 tests: matching logic, normalization
   test_agents.py      # 9 tests: output schemas, constants
   test_guardrails.py           # 35 tests: injection detection, PII leakage, helpers
-  test_guardrails_adversarial.py  # 77 tests: encoding bypass, social engineering, rate limiting, timeout, topic, false positive benchmark
+  test_guardrails_adversarial.py  # 89 tests: encoding bypass, social engineering, rate limiting, timeout, topic, false positive benchmark, input_guard_node integration
   test_api.py                 # 11 tests: HTTP routing, sessions, error handling
   test_e2e.py         # 6 E2E scenarios: injection, non-client, failed-secret, premium, regular, partial-id
   e2e_reports/        # Saved conversation transcripts from E2E runs
@@ -232,7 +232,7 @@ Reports saved in `tests/e2e_reports/`.
 GitHub Actions runs on every push and PR to `main`/`dev`:
 
 - Installs dependencies with uv
-- Runs 77 unit/API tests
+- Runs 166 unit/API/adversarial tests
 - Verifies the LangGraph compiles correctly
 
 See `.github/workflows/ci.yml`.

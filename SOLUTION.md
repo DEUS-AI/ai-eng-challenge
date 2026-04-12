@@ -15,11 +15,14 @@ graph TD
     D --> OP[output_policy<br/>PII detect · retry · redact]
     E --> OP
     F --> OP
-    R --> G[__end__]
+    R --> G[__end__<br/>respond to user]
     OP --> G
+    G -.->|next user message| A
+
+    style G fill:#f0f0f0,stroke:#999,stroke-dasharray: 5 5
 ```
 
-Each `graph.invoke()` processes exactly one turn: `input_guard → agent → output_policy → end`. The `phase` field in state routes the next message to the correct agent. Agents update state and phase via `Command(update=..., goto="output_policy")`.
+Each `graph.invoke()` processes one turn: `input_guard → agent → output_policy → end → respond`. The next user message re-enters at `__start__`, and the `phase` field (updated by the previous agent) routes it to the correct next agent.
 
 ### Agents
 

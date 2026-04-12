@@ -17,7 +17,6 @@ from src.guardrails import (
     GUARD_REFUSAL,
     LENGTH_REFUSAL,
     MAX_INPUT_LENGTH,
-    RATE_LIMIT_REFUSAL,
     TIMEOUT_REFUSAL,
     TOPIC_REFUSAL,
     check_injection,

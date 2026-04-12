@@ -1,8 +1,8 @@
 """Tests for agent output schemas and basic logic."""
 
-from src.agents.bouncer import BouncerOutput, MAX_SECRET_ATTEMPTS
+from src.agents.bouncer import BouncerOutput, MAX_SECRET_ATTEMPTS, _normalize_answer
 from src.agents.greeter import GreeterOutput
-from src.agents.specialist import DEPARTMENTS, SUPPORT_NUMBERS, SpecialistOutput
+from src.agents.specialist import SUPPORT_NUMBERS, SpecialistOutput
 
 
 class TestGreeterOutput:
@@ -56,8 +56,22 @@ class TestSpecialistOutput:
         assert SUPPORT_NUMBERS["premium"] == "+1999888999"
         assert SUPPORT_NUMBERS["regular"] == "+1112112112"
 
-    def test_departments_defined(self) -> None:
-        assert "loans" in DEPARTMENTS
-        assert "cards" in DEPARTMENTS
-        assert "insurance" in DEPARTMENTS
-        assert "general" in DEPARTMENTS
+    def test_department_literal(self) -> None:
+        output = SpecialistOutput(department="loans")
+        assert output.department == "loans"
+
+
+class TestBouncerSecretNormalization:
+    """Test deterministic secret answer comparison."""
+
+    def test_case_insensitive(self) -> None:
+        assert _normalize_answer("Yoda") == _normalize_answer("yoda")
+
+    def test_strips_whitespace(self) -> None:
+        assert _normalize_answer("  Yoda  ") == _normalize_answer("Yoda")
+
+    def test_exact_match(self) -> None:
+        assert _normalize_answer("Blue") == _normalize_answer("Blue")
+
+    def test_mismatch(self) -> None:
+        assert _normalize_answer("Wrong") != _normalize_answer("Yoda")

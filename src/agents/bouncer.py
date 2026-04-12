@@ -5,11 +5,12 @@ from __future__ import annotations
 import sqlite3
 from typing import Literal
 
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
 from src.database import Customer, find_customer_by_identifiers
+from src.guardrails import invoke_with_pii_guard
 from src.prompts import load_prompt
 from src.schemas import ConversationState
 
@@ -63,7 +64,7 @@ def bouncer_node(
     # Customer found — check if we're verifying the secret answer
     if state.get("matched_customer_id") is not None:
         # We've already asked the secret question — check the answer
-        return _check_secret_answer(state, customer, llm, secret_attempts)
+        return _check_secret_answer(state, customer, secret_attempts)
 
     # First time seeing this customer: ask the secret question
     return _ask_secret_question(state, customer, llm)
@@ -82,7 +83,6 @@ def _ask_secret_question(
     )
 
     messages = [SystemMessage(content=prompt)] + state["messages"]
-    from src.guardrails import invoke_with_pii_guard
     result: BouncerOutput = invoke_with_pii_guard(llm, messages, BouncerOutput)
 
     return Command(
@@ -96,35 +96,36 @@ def _ask_secret_question(
     )
 
 
+def _normalize_answer(answer: str) -> str:
+    """Normalize an answer for comparison: lowercase, strip whitespace."""
+    return answer.strip().lower()
+
+
 def _check_secret_answer(
-    state: ConversationState, customer: Customer, llm, attempts: int,
+    state: ConversationState, customer: Customer, attempts: int,
 ) -> Command[Literal["output_policy"]]:
-    """Check the customer's answer to the secret question. Ends the turn."""
+    """Check the customer's answer using deterministic string comparison.
+
+    The secret answer is never sent to the LLM — comparison happens in Python
+    code to prevent extraction via prompt injection.
+    """
     last_user_msg = ""
     for msg in reversed(state["messages"]):
         if hasattr(msg, "type") and msg.type == "human":
             last_user_msg = msg.content
             break
 
-    # Use LLM to check if answer is semantically correct
-    system_prompt = load_prompt("bouncer_secret_check").format(
-        secret_question=customer.secret_question,
-        secret_answer=customer.secret_answer,
-    )
+    # Deterministic comparison — case-insensitive, whitespace-trimmed
+    is_correct = _normalize_answer(last_user_msg) == _normalize_answer(customer.secret_answer)
 
-    from langchain_core.messages import HumanMessage
-    messages = [SystemMessage(content=system_prompt), HumanMessage(content=f"The customer answered: {last_user_msg}")]
-    structured_llm = llm.with_structured_output(BouncerOutput)
-    result: BouncerOutput = structured_llm.invoke(messages)
-
-    if result.secret_correct:
+    if is_correct:
         tier = "premium" if customer.premium else "regular"
         return Command(
             update={
-                "messages": [AIMessage(content=result.message)],
+                "messages": [AIMessage(content="Thank you. Your identity has been verified successfully.")],
                 "identity_verified": True,
                 "customer_tier": tier,
-                "phase": "routing",  # Next message goes to specialist
+                "phase": "routing",
             },
             goto="output_policy",
         )
@@ -156,7 +157,6 @@ def _check_secret_answer(
         update={
             "messages": [AIMessage(content=msg)],
             "secret_attempts": new_attempts,
-            # Stay in verification phase
         },
         goto="output_policy",
     )

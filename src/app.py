@@ -113,7 +113,7 @@ def start_chat() -> StartResponse:
         logger.exception("Error starting conversation")
         raise HTTPException(
             status_code=500,
-            detail=f"An error occurred starting the conversation: {type(e).__name__}",
+            detail="An error occurred starting the conversation. Please try again.",
         )
 
 
@@ -156,7 +156,7 @@ def send_message(request: ChatRequest) -> ChatResponse:
         logger.exception("Error processing message")
         raise HTTPException(
             status_code=500,
-            detail=f"An error occurred processing your message: {type(e).__name__}",
+            detail="An error occurred processing your message. Please try again.",
         )
 
 

@@ -166,12 +166,3 @@ def find_customer_by_identifiers(
             return _row_to_customer(row)
 
     return None
-
-
-def get_customer_by_iban(conn: sqlite3.Connection, iban: str) -> Customer | None:
-    row = conn.execute(
-        "SELECT * FROM customers WHERE iban = ?", (_normalize_iban(iban),)
-    ).fetchone()
-    if not row:
-        return None
-    return _row_to_customer(row)

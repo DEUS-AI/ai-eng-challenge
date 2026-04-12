@@ -15,11 +15,14 @@ graph TD
     D --> OP[output_policy<br/>PII detect · retry · redact]
     E --> OP
     F --> OP
-    R --> G[__end__]
+    R --> G[__end__<br/>respond to user]
     OP --> G
+    G -.->|next user message| A
+
+    style G fill:#f0f0f0,stroke:#999,stroke-dasharray: 5 5
 ```
 
-Each `graph.invoke()` processes exactly one turn: `input_guard → agent → output_policy → end`. The `phase` field in state routes the next message to the correct agent. Agents update state and phase via `Command(update=..., goto="output_policy")`.
+Each `graph.invoke()` processes one turn: `input_guard → agent → output_policy → end → respond`. The next user message re-enters at `__start__`, and the `phase` field (updated by the previous agent) routes it to the correct next agent.
 
 ### Agents
 
@@ -55,7 +58,7 @@ Every user message passes through these layers in order (cheapest first, <5ms to
 | LLM | Gemini Flash via AI Studio |
 | API | FastAPI |
 | Data store | SQLite |
-| Testing | pytest (166 unit/API/adversarial tests + 6 E2E scenarios) |
+| Testing | pytest (168 unit/API/adversarial tests + 6 E2E scenarios) |
 
 ## Setup
 
@@ -182,6 +185,7 @@ curl http://localhost:8000/health
 5. **Command pattern for routing** — Agents return `Command(update=..., goto=...)` for clean state transitions
 6. **Three-tier PII protection** — Prompt enforcement, LLM retry, then redaction fallback; avoids both false positives and data leaks
 7. **One LLM call per turn** — Each `graph.invoke()` processes exactly one turn to avoid rate-limit issues and keep conversations predictable
+8. **Deterministic secret answer check** — Secret answers compared in Python code (case-insensitive), never sent to the LLM. Eliminates prompt injection extraction risk
 
 ## Project Structure
 
@@ -194,7 +198,6 @@ src/
   prompts/
     greeter.txt       # Greeter system prompt
     bouncer_verify.txt       # Bouncer identity verification prompt
-    bouncer_secret_check.txt # Bouncer secret answer check prompt
     specialist.txt    # Specialist routing prompt
     pii_retry.txt     # PII retry correction instruction
   guardrails.py       # Input guard + output policy + PII retry logic
@@ -203,8 +206,8 @@ src/
   schemas.py          # ConversationState TypedDict
   app.py              # FastAPI app, routes, session management
 tests/
-  test_database.py    # 22 tests: matching logic, normalization
-  test_agents.py      # 9 tests: output schemas, constants
+  test_database.py    # 20 tests: matching logic, normalization
+  test_agents.py      # 13 tests: output schemas, constants, secret answer normalization
   test_guardrails.py           # 35 tests: injection detection, PII leakage, helpers
   test_guardrails_adversarial.py  # 89 tests: encoding bypass, social engineering, rate limiting, timeout, topic, false positive benchmark, input_guard_node integration
   test_api.py                 # 11 tests: HTTP routing, sessions, error handling

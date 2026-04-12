@@ -7,7 +7,6 @@ import pytest
 from src.database import (
     Customer,
     find_customer_by_identifiers,
-    get_customer_by_iban,
     init_db,
     seed_db,
 )
@@ -141,16 +140,6 @@ class TestIbanNormalization:
         )
         assert result is not None
 
-
-class TestGetCustomerByIban:
-    def test_exact_match(self, db: sqlite3.Connection) -> None:
-        result = get_customer_by_iban(db, "DE89370400440532013000")
-        assert result is not None
-        assert result.name == "Lisa"
-
-    def test_not_found(self, db: sqlite3.Connection) -> None:
-        result = get_customer_by_iban(db, "XX00000000000000")
-        assert result is None
 
 
 class TestCustomerTier:

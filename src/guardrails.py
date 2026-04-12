@@ -31,7 +31,6 @@ from src.schemas import ConversationState
 
 MAX_INPUT_LENGTH = 2000
 SESSION_TIMEOUT_SECONDS = 900  # 15 minutes
-RATE_LIMIT_RPM = 10
 INJECTION_LOCKOUT_THRESHOLD = 3
 LOCKOUT_BASE_SECONDS = 30
 LOCKOUT_MAX_SECONDS = 600
@@ -80,11 +79,6 @@ LENGTH_REFUSAL = (
 TIMEOUT_REFUSAL = (
     "Your session has expired due to inactivity. "
     "Please start a new conversation."
-)
-
-RATE_LIMIT_REFUSAL = (
-    "You are sending messages too quickly. "
-    "Please wait a moment before trying again."
 )
 
 TOPIC_REFUSAL = (

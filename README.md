@@ -1,96 +1,171 @@
-# 🤖 AI Engineer Code Challenge
+# DEUS Bank — AI Customer Support
 
-## 🎯 Business Requirements
+A multi-agent customer support system built on **LangGraph** with a **FastAPI**
+backend and a **React admin UI**. Callers are greeted, identified (≥ 2 of 3:
+name / phone / IBAN, plus a secret-question challenge), tier-classified, and
+routed to the right specialist — over text, push-to-talk voice, or streaming
+voice (Deepgram STT/TTS).
 
-> A customer calls the bank, hoping to get help, but instead, they get lost in an endless phone menu maze. Nightmare, right? Well, not on our watch!
+> See [`docs/architecture.md`](docs/architecture.md) for the design decisions,
+> state machine, security model, and known limitations.
+> The rendered graph lives at [`docs/graph.png`](docs/graph.png).
 
-Your mission is to build an **AI-powered customer support system** where multiple agents work together to identify the customer and route them to the right place—without the usual pain of endless phone menus.
+## Quick start (zero external services)
 
-Here's how the dream team of AI agents rolls:
+Requires **Python 3.12+**, [`uv`](https://github.com/astral-sh/uv), and
+**Node 20+** for the admin UI.
 
--   **👋 Agent 1: The Greeter**  
-    This is the friendly face of the bank. It starts the conversation, asks for identification, and makes sure the customer is legitimate.
+```bash
+# 1. Backend
+make install
+echo "GOOGLE_API_KEY=your-google-ai-studio-key" > .env
+make run                       # FastAPI on http://localhost:8004
+```
 
--   **🛡️ Agent 2: The Bouncer**  
-    Once the customer is identified, this agent steps in. It decides: are they a regular customer, a premium client, or not a customer at all?
+```bash
+# 2. Admin UI (in another terminal)
+cd frontend
+npm install
+npm run dev                    # http://localhost:5173
+```
 
--   **📞 Agent 3: The Specialist**  
-    If the customer has a specific, high-value request (like “Help me with my yacht insurance” 🛥️), this agent ensures they get to the right expert.
+The Vite dev server proxies `/api/*`, `/chat`, and `/voice` to port 8004,
+so both layers share the same origin during development.
 
--   **📜 Guardrails: The Rule Enforcer**  
-    This component keeps everything safe, professional, and aligned with bank policies. No accidental million-dollar loan approvals!
+**Only `GOOGLE_API_KEY` is required.** Everything else (MongoDB, Deepgram)
+is opt-in.
 
+## Configuration
 
-## 🛠️ Technical Requirements
+Create a `.env` file at the repo root. Only the first variable is required.
 
-Here’s what you need to build and how to deliver it.
+```bash
+GOOGLE_API_KEY=...                          # REQUIRED — Google AI Studio key
 
--   **🏗️ Framework & Structure**: You are free to use `LangGraph` or a similar framework. While a Jupyter Notebook is an acceptable format, remember that the overall structure and design of your solution will be a key part of the evaluation.
--   **🧠 LLM Choice**: You can use any LLM you prefer. Just remember to remove your API keys before submitting!
--   **⚙️ Core Logic**: The system must verify a customer by matching at least **two out of three** details (`name`, `phone`, `iban`) before asking their secret question.
--   **🚀 API Endpoint**: To simulate a real-world application, expose your solution via a `FastAPI` endpoint.
+# Optional — voice (STT + TTS)
+DEEPGRAM_API_KEY=...
+DEEPGRAM_STT_MODEL=nova-2-general
+DEEPGRAM_TTS_MODEL=aura-2-thalia-en
 
-<br>
+# Optional — persistent state + summaries
+MONGODB_URL=mongodb://localhost:27017
+MONGODB_DB_NAME=deus_bank
+```
+
+### What each toggle changes
+
+| Variable | Unset (default) | Set |
+|---|---|---|
+| `GOOGLE_API_KEY` | App fails to start | Gemini powers all LLM nodes |
+| `MONGODB_URL` | LangGraph uses `InMemorySaver` (state lost on restart); summaries fall back to `data/summaries.jsonl` | LangGraph checkpoints to Mongo; summaries land in the `summaries` collection |
+| `DEEPGRAM_API_KEY` | `/chat` ignores `audio_base64`; `/voice` accepts the WS then closes with 1011 ("Deepgram not configured"); admin UI Voice tab is text-only | `/chat` accepts and returns audio; `/voice` PTT works end-to-end |
+
+The architecture is intentionally tiered so you can run *any* combination —
+text-only with no infra, or full voice + persistence with everything wired.
+
+### With everything (Mongo + Deepgram)
+
+Easiest path is `docker compose up --build`, which brings up a local Mongo
+plus the backend together. Or run Mongo separately and:
+
+```bash
+DEEPGRAM_API_KEY=... MONGODB_URL=mongodb://localhost:27017 make run
+```
+
+## Admin UI
+
+Open <http://localhost:5173> when both servers are running:
+
+- **Test chat** — full text conversation against the agent graph, with a
+  debug pane showing the live `AgentState` (stage, identity, routing,
+  retries, latency).
+- **Voice** — Push-to-talk mode (working). Streaming mode is wired but
+  marked *(preview)* — see Voice limitations in
+  [`docs/architecture.md`](docs/architecture.md).
+- **Configure** — edit routing services, phrase templates (grouped by
+  conversation stage), and post-call summary metrics live; changes take
+  effect immediately.
+- **Summaries** — paginated list + iMessage-style transcript detail for
+  every completed call.
+
+## HTTP API
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/chat` | One conversation turn (text, optionally with `audio_base64`) |
+| `WS` | `/voice` | Streaming voice conversation (Deepgram Flux) |
+| `GET` | `/api/health` | Status + feature flags (`deepgram`, `mongo`) |
+| `GET / PUT` | `/api/config/routing` | Service routing rules |
+| `GET / PUT` | `/api/config/phrases` | Phrase templates per stage |
+| `GET / PUT` | `/api/config/metrics` | Post-call summary metrics schema |
+| `GET` | `/api/summaries` | Paginated post-call summaries |
+| `GET` | `/api/summaries/{id}` | Single summary detail |
+| `GET` | `/api/sessions/{id}/state` | Current `AgentState` snapshot |
+
+## Make targets
+
+| Command | What it does |
+|---|---|
+| `make install` | Install backend deps via `uv sync --all-extras` |
+| `make run` | uvicorn on port 8004 with auto-reload |
+| `make test` | Run the pytest suite |
+| `make check` | Lint + format check + tests |
+| `make simulate` | Run one canned scripted call against `/chat` |
+| `make simulate-all` | Run every canned scenario back-to-back |
+| `make simulate-interactive` | REPL session against `/chat` |
+| `make simulate-voice AUDIO=path/to.wav` | Send a recorded audio file through `/chat` |
+| `make simulate-call-live` | Live-mic streaming test against `/voice` |
+| `make simulate-call-ptt` | Local PTT loop against `/chat` |
+| `make draw-graph` | Re-render `docs/graph.png` |
+| `make docker-build` / `make docker-up` | Container path |
+
+## Tests
+
+```bash
+make test                      # backend (pytest, ~250 tests)
+cd frontend && npm test        # admin UI (vitest, ~20 tests)
+```
+
+CI-style one-shot:
+
+```bash
+make check                     # ruff lint + format + pytest
+cd frontend && npx tsc --noEmit && npx vitest run
+```
+
+---
 
 <details>
-<summary><strong>📄 Click to see example data structures</strong></summary>
+<summary><strong>Original challenge brief</strong></summary>
+
+A customer calls the bank, hoping to get help, but instead, they get lost in
+an endless phone menu maze. Build an **AI-powered customer support system**
+where multiple agents work together to identify the customer and route them
+to the right place.
+
+- **The Greeter** — friendly face of the bank; opens the conversation, asks
+  for identification, makes sure the customer is legitimate.
+- **The Bouncer** — once identified, decides regular / premium / non-customer.
+- **The Specialist** — for specific high-value requests, ensures they reach
+  the right expert.
+- **Guardrails** — keeps everything safe, professional, and policy-compliant.
+
+Verification requires matching **at least two of three** details
+(`name`, `phone`, `iban`) before asking the secret question.
 
 ```python
-# Example of user data for verification
 example_of_user = {
   "name": "Lisa",
   "phone": "+1122334455",
   "iban": "DE89370400440532013000",
-  "secret" : "Which is the name of my dog?",
-  "answer" : "Yoda"
+  "secret": "Which is the name of my dog?",
+  "answer": "Yoda",
 }
-```
 
-```python
-# Example of account data to determine status
 example_of_account = {
   "iban": "DE89370400440532013000",
-  "premiun" : True
+  "premium": True,
 }
 ```
+
 </details>
-
-<br>
-
-<details>
-<summary><strong>💬 Click to see expected responses</strong></summary>
-
-> **Note**: Your responses can be different, but be careful not to leak sensitive user data. For example, phone numbers should only be shown to verified clients.
-
--   **✅ Premium Client:**
-    > "Thank you for reaching out regarding your account issue. As a premium client, we value your experience and are here to assist you. For immediate support, please contact our dedicated support department at +1999888999..."
--   **✅ Regular Client:**
-    > "I'm sorry to hear that you're having trouble with your account. Since you're a regular client, I recommend that you call our support department at +1112112112 for assistance..."
--   **❌ Non-Client:**
-    > "Thank you for reaching out. It seems that you are not currently a client of DEUS Bank. I recommend that you contact your bank's support department directly for assistance..."
-</details>
-
-## 📦 Deliverables
-
-1.  **📈 Architecture Diagram**: A visual diagram (like the example below) illustrating your system's workflow.
-2.  **💻 Working Code**: Your full implementation, including unit tests for key logic.
-3.  **📄 Pull Request(s)**: Use a GitFlow-style approach to submit your features in one or more PRs.
-4.  **💬 Realistic Commits**: A clean Git history with logical, well-described commits.
-5.  **📤 Submission**: Please commit and push your solution directly to this repository.
-
-![Graph example](lang-graph.png?raw=true "Graph example")
-
----
-
-## ✨ Bonus Points
-
-Want to go the extra mile? Consider exploring these optional extensions:
-
--   **🗣️ Add a Voice Interface**: Integrate text-to-speech (TTS) and speech-to-text (STT) to give your AI a voice.
--   **🔒 Implement Advanced Guardrails**: Add more sophisticated safety mechanisms to prevent harmful, off-topic, or irrelevant responses.
--   **📚 Incorporate Conversation History**: Give your system memory to allow for more natural, context-aware conversations.
--   **🧪 Add Comprehensive Testing**: Implement a robust testing suite to ensure code quality and reliability.
--   **🚀 Implement CI/CD**: Set up a continuous integration and deployment pipeline to automate testing and releases.
--   **🐳 Dockerize the Application**: Package the solution into a Docker container for easy deployment and scalability.
-
-Now, go forth and build the most epic AI-powered customer support ever! 🚀

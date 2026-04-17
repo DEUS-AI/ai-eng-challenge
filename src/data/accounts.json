@@ -1,0 +1,14 @@
+[
+  {
+    "account_number": "ACC-001",
+    "iban": "DE89370400440532013000",
+    "nif": "123456789",
+    "premium": false
+  },
+  {
+    "account_number": "ACC-002",
+    "iban": "PT50000201231234567890154",
+    "nif": "234567890",
+    "premium": true
+  }
+]

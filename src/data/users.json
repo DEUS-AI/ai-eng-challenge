@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Lisa",
+    "phone": "+1122334455",
+    "nif": "123456789",
+    "iban": "DE89370400440532013000",
+    "account_number": "ACC-001",
+    "secret": "Which is the name of my dog?",
+    "answer": "Yoda"
+  },
+  {
+    "name": "Carlos",
+    "phone": "+351987654321",
+    "nif": "234567890",
+    "iban": "PT50000201231234567890154",
+    "account_number": "ACC-002",
+    "secret": "What is your mother's maiden name?",
+    "answer": "Silva"
+  },
+  {
+    "name": "John",
+    "phone": "+447911123456",
+    "nif": "345678901",
+    "iban": "GB29NWBK60161331926819",
+    "account_number": null,
+    "secret": "What was the name of your first school?",
+    "answer": "Greenwood"
+  }
+]

@@ -8,6 +8,7 @@ dependencies = [
     "aiofiles>=25.1.0",
     "langchain>=1.2.15",
     "langchain-google-genai",
+    "langgraph>=1.1.8",
     "python-dotenv>=1.2.2",
 ]
 

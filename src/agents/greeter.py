@@ -1,12 +1,11 @@
 from langchain.agents import create_agent
 from agents.tools import verify_identity
 from ai.llm import call_google_generative_ai_model
-import yaml
+from utils.get_prompts import get_prompt
 
-with open("src/ai/prompt.yaml", "r") as f:
-    prompts = yaml.safe_load(f)
 
-GREETER_AGENT_PROMPT = prompts["GREETER_AGENT_PROMPT"]
+
+GREETER_AGENT_PROMPT = get_prompt("GREETER_AGENT_PROMPT")
 
 
 model = call_google_generative_ai_model()
@@ -17,11 +16,12 @@ greeter_agent = create_agent(
     system_prompt=GREETER_AGENT_PROMPT,
 )
 
-query = "Send the design team a reminder about reviewing the new mockups"
+if __name__ == "__main__":
+    query = "Hello, I need some help with my account."
 
-for step in greeter_agent.stream(
-    {"messages": [{"role": "user", "content": query}]}
-):
-    for update in step.values():
-        for message in update.get("messages", []):
-            message.pretty_print()
+    for step in greeter_agent.stream(
+        {"messages": [{"role": "user", "content": query}]}
+    ):
+        for update in step.values():
+            for message in update.get("messages", []):
+                message.pretty_print()

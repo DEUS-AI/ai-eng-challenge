@@ -24,7 +24,16 @@ from langgraph.checkpoint.memory import InMemorySaver
 from agents.greeter import greeter_agent
 from agents.bouncer import bouncer_agent
 from agents.specialist import specialist_agent
+from ai.llm import call_google_generative_ai_model
 from config.models import Skill, IdentityResult, AccountResult, SpecialistDecision
+from utils.get_prompts import get_prompt
+
+_llm = call_google_generative_ai_model()
+
+def _llm_respond(prompt_key: str) -> str:
+    prompt = get_prompt(prompt_key)
+    result = _llm.invoke(prompt)
+    return result.content.strip()
 
 # ── Shared state ─────────────────────────────────────────────────────────────
 
@@ -66,7 +75,7 @@ def nif_input(state: ChatState) -> dict:
 
 
 def nif_invalid(state: ChatState) -> dict:
-    msg = "That doesn't look like a valid NIF. Please enter your 9-digit NIF number."
+    msg = _llm_respond("NIF_INVALID_PROMPT")
     return {
         "nif": "",
         "agent_messages": [msg],
@@ -86,7 +95,7 @@ def greeter_verify(state: ChatState) -> dict:
         (m.content for m in result["messages"] if type(m).__name__ == "ToolMessage"),
         "",
     )
-    parsed = IdentityResult(verified="verified successfully" in tool_content.lower())
+    parsed = IdentityResult(verified=tool_content == "Identity verified successfully")
     return {
         "identity_verified": parsed.verified,
         "log_lines": [f"\n**[internal greeter_verify]**: {parsed.model_dump()}"],
@@ -113,10 +122,7 @@ def bouncer(state: ChatState) -> dict:
 
 
 def reject(state: ChatState) -> dict:
-    msg = (
-        "I'm sorry, I could not find an account associated with that NIF. "
-        "We are unable to proceed. Goodbye!"
-    )
+    msg = _llm_respond("REJECT_PROMPT")
     return {
         "agent_messages": [msg],
         "log_lines": [f"\n**Bouncer Agent**: {msg}"],
@@ -124,7 +130,7 @@ def reject(state: ChatState) -> dict:
 
 
 def request_welcome(state: ChatState) -> dict:
-    msg = "How can I help you today?"
+    msg = _llm_respond("REQUEST_WELCOME_PROMPT")
     return {
         "agent_messages": [msg],
         "log_lines": [f"\n**Specialist Agent**: {msg}"],
@@ -161,9 +167,14 @@ def specialist(state: ChatState) -> dict:
         except (ValueError, TypeError):
             skill = None
         parsed = SpecialistDecision(in_scope=True, skill=skill)
+        employee_name = tool_msg.content
+        if employee_name == "no_employee_available":
+            response = "No specialist is currently available. Your request has been escalated."
+        else:
+            response = f"{employee_name} will attend your request, I will pass the request."
         return {
-            "agent_messages": [tool_msg.content],
-            "log_lines": [f"\n**Specialist Agent**: {tool_msg.content}"],
+            "agent_messages": [response],
+            "log_lines": [f"\n**Specialist Agent**: {response}"],
         }
     # No tool called — agent refused the request
     refusal = next(

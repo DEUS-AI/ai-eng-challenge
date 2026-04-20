@@ -32,7 +32,7 @@ def delegate_hitl(skill: Skill) -> str:
     """
     employee = asyncio.run(get_personalized_employee(skill.value))
     if employee:
-        return f" {employee['name']} is available for further assistance."
+        return employee['name']
     
-    return "No available employee found with the required skill. Request has been escalated to a human agent for further assistance."
+    return "no_employee_available"
 

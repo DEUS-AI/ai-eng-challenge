@@ -19,7 +19,7 @@ def save_log(log_lines: list[str]) -> None:
 def chat() -> None:
     graph = compile_graph()
     config = {"configurable": {"thread_id": str(uuid4())}}
-    shown = 0  # number of agent_messages already displayed
+    shown = 0
 
     print("\n" + "=" * 60)
     print("Welcome to DEUS Bank Customer Support")
@@ -27,7 +27,10 @@ def chat() -> None:
     print("=" * 60 + "\n")
 
     initial_state = {
-        "nif": "",
+        "user_details": "",
+        "secret_question": "",
+        "matched_nif": "",
+        "secret_answer": "",
         "identity_verified": False,
         "account_type": "",
         "user_request": "",

@@ -186,15 +186,41 @@ def request_input(state: ChatState) -> dict:
     }
 
 
+# Patterns that indicate an attempt to inject system-level instructions into user input.
+_INJECTION_PATTERNS = (
+    "[system",
+    "ignore all",
+    "ignore previous",
+    "new rule:",
+    "override:",
+    "context update",
+    "you are now",
+    "act as",
+)
+
+
+def _sanitize_user_line(line: str) -> str | None:
+    """Return the line if it looks safe, or None to drop it from history."""
+    lower = line.lower()
+    if any(pat in lower for pat in _INJECTION_PATTERNS):
+        return None
+    return line
+
+
 def specialist(state: ChatState) -> dict:
     """Runs specialist_agent with conversation history for contextual memory."""
     history = []
     log_lines = state.get("log_lines", [])
-    # Build conversation history from log lines (exclude internal lines and headers)
-    conversation = [
-        line.strip() for line in log_lines
-        if line.startswith("\n**You**:") or line.startswith("\n**Specialist Agent**:")
-    ]
+    # Build conversation history — sanitize user turns to prevent history poisoning.
+    conversation: list[str] = []
+    for line in log_lines:
+        stripped = line.strip()
+        if stripped.startswith("**Specialist Agent**:"):
+            conversation.append(stripped)
+        elif stripped.startswith("**You**:"):
+            safe = _sanitize_user_line(stripped)
+            if safe:
+                conversation.append(safe)
     if conversation:
         history.append({
             "role": "system",

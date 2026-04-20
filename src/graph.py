@@ -2,17 +2,20 @@
 StateGraph definition for DEUS Bank customer support.
 
 Flow:
-  START → greeting → nif_input*
-                        ├─ invalid format  → nif_invalid → nif_input* (loop)
-                        └─ 9-digit NIF    → greeter_verify [verify_identity]
-                                                ├─ not found → reject → END
-                                                └─ verified  → bouncer [verify_account_type]
-                                                                  ├─ not found → reject → END
-                                                                  └─ found     → request_welcome → request_input*
-                                                                                                    ├─ exit    → farewell → END
-                                                                                                    └─ request → specialist → request_input* (loop)
+  START → greeting → details_input*
+                        └─ greeter_verify [verify_identity 2-of-3]
+                                ├─ no match → reject → END
+                                └─ 2/3 match → secret_question_node → secret_input*
+                                                                          ├─ wrong answer → reject → END
+                                                                          └─ verified → bouncer [verify_account_type]
+                                                                                          ├─ not found → reject → END
+                                                                                          └─ found → request_welcome → request_input*
+                                                                                                        ├─ exit → farewell → END
+                                                                                                        └─ request → specialist → request_input* (loop)
 * = interrupt (waits for human input)
 """
+import json
+import asyncio
 import operator
 from typing import Annotated
 from typing_extensions import TypedDict
@@ -27,6 +30,7 @@ from agents.specialist import specialist_agent
 from ai.llm import call_google_generative_ai_model
 from config.models import Skill, IdentityResult, AccountResult, SpecialistDecision
 from utils.get_prompts import get_prompt
+from utils.database_queries import verify_secret
 
 _llm = call_google_generative_ai_model()
 
@@ -38,12 +42,15 @@ def _llm_respond(prompt_key: str) -> str:
 # ── Shared state ─────────────────────────────────────────────────────────────
 
 class ChatState(TypedDict):
-    nif: str
+    user_details: str
+    secret_question: str
+    matched_nif: str
+    secret_answer: str
     identity_verified: bool
     account_type: str
     user_request: str
-    agent_messages: Annotated[list[str], operator.add]   # every agent response, accumulated
-    log_lines: Annotated[list[str], operator.add]        # full conversation log
+    agent_messages: Annotated[list[str], operator.add]
+    log_lines: Annotated[list[str], operator.add]
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -59,53 +66,79 @@ def _call_agent(agent, message: str) -> str:
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
 def greeting(state: ChatState) -> dict:
-    response = _call_agent(greeter_agent, "Greet the customer and ask for their NIF.")
+    response = _call_agent(greeter_agent, "Greet the customer and ask for their authentication details.")
     return {
         "agent_messages": [response],
         "log_lines": [f"\n**Greeter Agent**: {response}"],
     }
 
 
-def nif_input(state: ChatState) -> dict:
-    nif = interrupt("Waiting for NIF")
+def details_input(state: ChatState) -> dict:
+    user_input = interrupt("Waiting for customer details")
     return {
-        "nif": nif.strip(),
-        "log_lines": [f"\n**You**: {nif}"],
-    }
-
-
-def nif_invalid(state: ChatState) -> dict:
-    msg = _llm_respond("NIF_INVALID_PROMPT")
-    return {
-        "nif": "",
-        "agent_messages": [msg],
-        "log_lines": [f"\n**Greeter Agent**: {msg}"],
+        "user_details": user_input.strip(),
+        "log_lines": [f"\n**You**: {user_input}"],
     }
 
 
 def greeter_verify(state: ChatState) -> dict:
-    """Runs greeter_agent, parses ToolMessage into IdentityResult."""
+    """Runs greeter_agent with user details, parses tool response to extract secret question."""
     result = greeter_agent.invoke({
-        "messages": [{
-            "role": "user",
-            "content": f"The customer provided NIF {state['nif']}. Please verify their identity.",
-        }]
+        "messages": [{"role": "user", "content": state["user_details"]}]
     })
     tool_content = next(
         (m.content for m in result["messages"] if type(m).__name__ == "ToolMessage"),
         "",
     )
-    parsed = IdentityResult(verified=tool_content == "Identity verified successfully")
+    try:
+        data = json.loads(tool_content)
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    if data.get("status") == "match":
+        parsed = IdentityResult(
+            verified=False,
+            secret_question=data.get("secret_question", ""),
+            matched_nif=data.get("nif", ""),
+        )
+    else:
+        parsed = IdentityResult(verified=False)
     return {
         "identity_verified": parsed.verified,
+        "secret_question": parsed.secret_question,
+        "matched_nif": parsed.matched_nif,
         "log_lines": [f"\n**[internal greeter_verify]**: {parsed.model_dump()}"],
+    }
+
+
+def secret_question_node(state: ChatState) -> dict:
+    msg = f"Security question: {state['secret_question']}"
+    return {
+        "agent_messages": [msg],
+        "log_lines": [f"\n**Greeter Agent**: {msg}"],
+    }
+
+
+def secret_input(state: ChatState) -> dict:
+    answer = interrupt("Waiting for secret answer")
+    return {
+        "secret_answer": answer.strip(),
+        "log_lines": [f"\n**You**: {answer}"],
+    }
+
+
+def secret_verify(state: ChatState) -> dict:
+    """Verifies the secret answer directly against the database."""
+    verified = asyncio.run(verify_secret(state["matched_nif"], state["secret_answer"]))
+    return {
+        "identity_verified": verified,
+        "log_lines": [f"\n**[internal secret_verify]**: {{'verified': {verified}}}"],
     }
 
 
 def bouncer(state: ChatState) -> dict:
     """Runs bouncer_agent, parses ToolMessage into AccountResult."""
     result = bouncer_agent.invoke({
-        "messages": [{"role": "user", "content": state["nif"]}]
+        "messages": [{"role": "user", "content": state["matched_nif"]}]
     })
     tool_content = next(
         (m.content for m in result["messages"] if type(m).__name__ == "ToolMessage"),
@@ -129,6 +162,14 @@ def reject(state: ChatState) -> dict:
     }
 
 
+def reject_secret(state: ChatState) -> dict:
+    msg = _llm_respond("SECRET_REJECT_PROMPT")
+    return {
+        "agent_messages": [msg],
+        "log_lines": [f"\n**Bouncer Agent**: {msg}"],
+    }
+
+
 def request_welcome(state: ChatState) -> dict:
     msg = _llm_respond("REQUEST_WELCOME_PROMPT")
     return {
@@ -146,10 +187,24 @@ def request_input(state: ChatState) -> dict:
 
 
 def specialist(state: ChatState) -> dict:
-    """Runs specialist_agent, parses ToolMessage into SpecialistDecision."""
-    result = specialist_agent.invoke({
-        "messages": [{"role": "user", "content": state["user_request"]}]
+    """Runs specialist_agent with conversation history for contextual memory."""
+    history = []
+    log_lines = state.get("log_lines", [])
+    # Build conversation history from log lines (exclude internal lines and headers)
+    conversation = [
+        line.strip() for line in log_lines
+        if line.startswith("\n**You**:") or line.startswith("\n**Specialist Agent**:")
+    ]
+    if conversation:
+        history.append({
+            "role": "system",
+            "content": "Conversation so far:\n" + "\n".join(conversation),
+        })
+    history.append({
+        "role": "user",
+        "content": f"Account type: {state['account_type']}\n\nCustomer request: {state['user_request']}",
     })
+    result = specialist_agent.invoke({"messages": history})
     tool_msg = next(
         (m for m in result["messages"] if type(m).__name__ == "ToolMessage"),
         None,
@@ -168,10 +223,30 @@ def specialist(state: ChatState) -> dict:
             skill = None
         parsed = SpecialistDecision(in_scope=True, skill=skill)
         employee_name = tool_msg.content
-        if employee_name == "no_employee_available":
+        account_type = state.get("account_type", "regular").lower()
+        # Use last AIMessage if LLM composed a response after the tool call
+        final_ai_msg = next(
+            (m.content for m in reversed(result["messages"])
+             if type(m).__name__ == "AIMessage"
+             and getattr(m, "content", None)
+             and not getattr(m, "tool_calls", [])),
+            None,
+        )
+        if final_ai_msg:
+            response = final_ai_msg
+        elif employee_name == "no_employee_available":
             response = "No specialist is currently available. Your request has been escalated."
+        elif account_type == "premium":
+            response = (
+                f"Thank you for reaching out. As a premium client, we value your experience. "
+                f"{employee_name} will attend your request. "
+                f"For immediate support, you can also contact our dedicated support line at +1999888999."
+            )
         else:
-            response = f"{employee_name} will attend your request, I will pass the request."
+            response = (
+                f"{employee_name} will attend your request. "
+                f"For assistance, you can also call our support department at +1112112112."
+            )
         return {
             "agent_messages": [response],
             "log_lines": [f"\n**Specialist Agent**: {response}"],
@@ -199,17 +274,16 @@ def farewell(state: ChatState) -> dict:
 
 # ── Routing ───────────────────────────────────────────────────────────────────
 
-def route_after_nif_input(state: ChatState) -> str:
-    nif = state.get("nif", "")
-    if nif.isdigit() and len(nif) == 9:
-        return "greeter_verify"
-    return "nif_invalid"
-
-
 def route_after_greeter(state: ChatState) -> str:
+    if state.get("secret_question"):
+        return "secret_question_node"
+    return "reject_details"
+
+
+def route_after_secret_verify(state: ChatState) -> str:
     if state.get("identity_verified"):
         return "bouncer"
-    return "reject"
+    return "reject_secret"
 
 
 def route_after_bouncer(state: ChatState) -> str:
@@ -232,35 +306,41 @@ def build_graph() -> StateGraph:
     builder = StateGraph(ChatState)
 
     builder.add_node("greeting", greeting)
-    builder.add_node("nif_input", nif_input)
-    builder.add_node("nif_invalid", nif_invalid)
+    builder.add_node("details_input", details_input)
     builder.add_node("greeter_verify", greeter_verify)
+    builder.add_node("secret_question_node", secret_question_node)
+    builder.add_node("secret_input", secret_input)
+    builder.add_node("secret_verify", secret_verify)
     builder.add_node("bouncer", bouncer)
     builder.add_node("reject", reject)
+    builder.add_node("reject_secret", reject_secret)
     builder.add_node("request_welcome", request_welcome)
     builder.add_node("request_input", request_input)
     builder.add_node("specialist", specialist)
     builder.add_node("farewell", farewell)
 
     builder.add_edge(START, "greeting")
-    builder.add_edge("greeting", "nif_input")
-    builder.add_conditional_edges(
-        "nif_input",
-        route_after_nif_input,
-        {"greeter_verify": "greeter_verify", "nif_invalid": "nif_invalid"},
-    )
+    builder.add_edge("greeting", "details_input")
+    builder.add_edge("details_input", "greeter_verify")
     builder.add_conditional_edges(
         "greeter_verify",
         route_after_greeter,
-        {"bouncer": "bouncer", "reject": "reject"},
+        {"secret_question_node": "secret_question_node", "reject_details": "reject"},
     )
-    builder.add_edge("nif_invalid", "nif_input")
+    builder.add_edge("secret_question_node", "secret_input")
+    builder.add_edge("secret_input", "secret_verify")
+    builder.add_conditional_edges(
+        "secret_verify",
+        route_after_secret_verify,
+        {"bouncer": "bouncer", "reject_secret": "reject_secret"},
+    )
     builder.add_conditional_edges(
         "bouncer",
         route_after_bouncer,
         {"reject": "reject", "request_welcome": "request_welcome"},
     )
     builder.add_edge("reject", END)
+    builder.add_edge("reject_secret", END)
     builder.add_edge("request_welcome", "request_input")
     builder.add_conditional_edges(
         "request_input",
@@ -274,4 +354,6 @@ def build_graph() -> StateGraph:
 
 
 def compile_graph(checkpointer=None):
-    return build_graph().compile(checkpointer=checkpointer or InMemorySaver())
+    if checkpointer is None:
+        checkpointer = InMemorySaver()
+    return build_graph().compile(checkpointer=checkpointer)

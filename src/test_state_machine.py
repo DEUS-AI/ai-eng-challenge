@@ -1,23 +1,31 @@
 """
 State machine tests using LangGraph StateGraph.
-Simulates 3 conversation scenarios with predefined inputs via Command(resume=...).
+Simulates conversation scenarios with predefined inputs via Command(resume=...).
+
+Auth flow: provide 2-of-3 details (name, phone, iban) → secret question → answer → bouncer
 """
+import os
+from datetime import datetime
 from langgraph.types import Command
 
 from graph import compile_graph
 
 
-def run_scenario(name: str, nif: str, requests: list[str]) -> None:
+def run_scenario(name: str, auth_details: str, secret_answer: str, requests: list[str]) -> list[str]:
     print(f"\n{'=' * 60}")
     print(f"SCENARIO: {name}")
     print(f"{'=' * 60}")
 
     graph = compile_graph()
     config = {"configurable": {"thread_id": name}}
-    shown = 0  # index of last displayed agent_message
+    shown = 0
+    transcript: list[str] = [f"### {name}\n\n"]
 
     initial_state = {
-        "nif": "",
+        "user_details": "",
+        "secret_question": "",
+        "matched_nif": "",
+        "secret_answer": "",
         "identity_verified": False,
         "account_type": "",
         "user_request": "",
@@ -29,60 +37,135 @@ def run_scenario(name: str, nif: str, requests: list[str]) -> None:
         nonlocal shown
         if user_label is not None:
             print(f"  You: {user_label}")
+            transcript.append(f"**You**: {user_label}\n\n")
         graph.invoke(inputs, config=config)
         messages = graph.get_state(config).values.get("agent_messages", [])
         for msg in messages[shown:]:
             print(f"  Agent: {msg}")
+            transcript.append(f"**Agent**: {msg}\n\n")
         shown = len(messages)
 
-    # Start — runs greeting, pauses at nif_input interrupt
     invoke_and_print(initial_state)
 
-    # Provide NIF
     if graph.get_state(config).next:
-        invoke_and_print(Command(resume=nif), user_label=nif)
+        invoke_and_print(Command(resume=auth_details), user_label=auth_details)
 
-    # Provide service requests
+    if graph.get_state(config).next:
+        invoke_and_print(Command(resume=secret_answer), user_label=secret_answer)
+
     for req in requests:
         if not graph.get_state(config).next:
             break
         invoke_and_print(Command(resume=req), user_label=req)
 
-    # End session if still running
     if graph.get_state(config).next:
         invoke_and_print(Command(resume="exit"), user_label="exit")
 
     print(f"\n--- End of scenario: {name} ---")
+    transcript.append("\n---\n\n")
+    return transcript
+
+
+def save_report(all_lines: list[str]) -> None:
+    log_dir = os.path.join(os.path.dirname(__file__), "../logs")
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(log_dir, f"test_run_{timestamp}.md")
+    header = [
+        f"# Test Run — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n",
+        "Auth flow: 2-of-3 details (name, phone, IBAN) → secret question → service request\n\n",
+        "---\n\n",
+    ]
+    with open(path, "w") as f:
+        f.writelines(header + all_lines)
+    print(f"\nReport saved to {path}")
 
 
 if __name__ == "__main__":
-    # 1. Regular customer asks about her account
-    run_scenario(
-        name="scenario-lisa-accounts",
-        nif="123456789",
-        requests=["Quero saber o saldo da minha conta"],
+    all_lines: list[str] = []
+
+    all_lines += run_scenario(
+        name="scenario-lisa-name-phone",
+        auth_details="Name: Lisa, Phone: +1122334455",
+        secret_answer="Yoda",
+        requests=["I want to check my account balance"],
     )
 
-    # 2. Premium customer asks about investments
-    run_scenario(
-        name="scenario-carlos-investments",
-        nif="234567890",
-        requests=["Gostava de falar sobre os meus investimentos em ações"],
+    all_lines += run_scenario(
+        name="scenario-carlos-name-iban",
+        auth_details="Name: Carlos, IBAN: PT50000201231234567890154",
+        secret_answer="Silva",
+        requests=["I'd like to talk about my investment portfolio"],
     )
 
-    # 3. Non-customer — rejected after NIF
-    run_scenario(
-        name="scenario-john-not-customer",
-        nif="345678901",
+    all_lines += run_scenario(
+        name="scenario-john-no-account",
+        auth_details="Name: John, Phone: +447911123456, IBAN: GB29NWBK60161331926819",
+        secret_answer="Greenwood",
         requests=[],
     )
 
-    # 4. Invalid NIF format — should loop back and ask again
-    run_scenario(
-        name="scenario-invalid-nif",
-        nif="olá",
-        requests=["123456789", "Quero saber o saldo da minha conta"],
+    all_lines += run_scenario(
+        name="scenario-wrong-details",
+        auth_details="Name: Unknown, Phone: +0000000000",
+        secret_answer="",
+        requests=[],
     )
+
+    all_lines += run_scenario(
+        name="scenario-lisa-wrong-secret",
+        auth_details="Name: Lisa, IBAN: DE89370400440532013000",
+        secret_answer="WrongAnswer",
+        requests=[],
+    )
+
+    # Account issue — premium client (Carlos)
+    all_lines += run_scenario(
+        name="scenario-carlos-account-issue",
+        auth_details="Name: Carlos, IBAN: PT50000201231234567890154",
+        secret_answer="Silva",
+        requests=["I'm having an issue with my account"],
+    )
+
+    # Account issue — regular client (Lisa)
+    all_lines += run_scenario(
+        name="scenario-lisa-account-issue",
+        auth_details="Name: Lisa, Phone: +1122334455",
+        secret_answer="Yoda",
+        requests=["I'm having an issue with my account"],
+    )
+
+    # Account issue — non-client (John, no account)
+    all_lines += run_scenario(
+        name="scenario-john-account-issue",
+        auth_details="Name: John, Phone: +447911123456, IBAN: GB29NWBK60161331926819",
+        secret_answer="Greenwood",
+        requests=["I'm having an issue with my account"],
+    )
+
+    # Memory: ask about previous request in same session
+    all_lines += run_scenario(
+        name="scenario-memory-what-did-i-ask",
+        auth_details="Name: Lisa, Phone: +1122334455",
+        secret_answer="Yoda",
+        requests=[
+            "I want to check my account balance",
+            "What was my previous request?",
+        ],
+    )
+
+    # Memory: ask about the agent response
+    all_lines += run_scenario(
+        name="scenario-memory-what-did-agent-say",
+        auth_details="Name: Carlos, IBAN: PT50000201231234567890154",
+        secret_answer="Silva",
+        requests=[
+            "I'd like to talk about my investment portfolio",
+            "What did you tell me just now?",
+        ],
+    )
+
+    save_report(all_lines)
 
     print(f"\n{'=' * 60}")
     print("All scenarios completed.")

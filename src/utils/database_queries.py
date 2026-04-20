@@ -20,6 +20,33 @@ async def get_user_by_nif(nif: str):
     return None
 
 
+async def get_user_by_details(name: str, phone: str, iban: str):
+    """Return user if at least 2 of 3 details (name, phone, iban) match."""
+    async with aiofiles.open(user_accounts_path, "r") as f:
+        content = await f.read()
+    users = json.loads(content)
+    for user in users:
+        matches = sum([
+            bool(name) and name.lower().strip() == user["name"].lower().strip(),
+            bool(phone) and phone.strip() == user["phone"].strip(),
+            bool(iban) and iban.strip() == user["iban"].strip(),
+        ])
+        if matches >= 2:
+            return user
+    return None
+
+
+async def verify_secret(nif: str, answer: str) -> bool:
+    """Verify the secret answer for a user identified by NIF."""
+    async with aiofiles.open(user_accounts_path, "r") as f:
+        content = await f.read()
+    users = json.loads(content)
+    for user in users:
+        if user["nif"] == nif:
+            return answer.lower().strip() == user["answer"].lower().strip()
+    return False
+
+
 async def get_account_type(nif:str): 
 
     """Fetch account type based on NIF."""

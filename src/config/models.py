@@ -34,6 +34,8 @@ class SkillRequest(BaseModel):
 class IdentityResult(BaseModel):
     """Output of the identity verification step."""
     verified: bool
+    secret_question: str = ""
+    matched_nif: str = ""
 
 
 class AccountResult(BaseModel):

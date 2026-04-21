@@ -5,6 +5,7 @@ from uuid import uuid4
 from langgraph.types import Command
 
 from graph import compile_graph
+from utils.tts import speak
 
 
 def save_log(log_lines: list[str]) -> None:
@@ -44,6 +45,7 @@ def chat() -> None:
         messages = graph.get_state(config).values.get("agent_messages", [])
         for msg in messages[shown:]:
             print(f"Agent: {msg}\n")
+            speak(msg)
         shown = len(messages)
 
     try:

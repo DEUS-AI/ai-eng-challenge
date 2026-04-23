@@ -1,14 +1,16 @@
 
 
+from pathlib import Path
 import json
 import aiofiles
 from datetime import datetime
 
+_DATA_DIR = Path(__file__).parent.parent / "data"
 
-user_accounts_path = "src/data/users.json"
-accounts_type_path = "src/data/accounts.json"
-employees_path = "src/data/employees.json"
-complaints_path = "src/data/complaints.json"
+user_accounts_path = str(_DATA_DIR / "users.json")
+accounts_type_path = str(_DATA_DIR / "accounts.json")
+employees_path = str(_DATA_DIR / "employees.json")
+complaints_path = str(_DATA_DIR / "complaints.json")
 
 
 async def get_user_by_nif(nif: str):

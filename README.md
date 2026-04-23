@@ -1,96 +1,167 @@
-# 🤖 AI Engineer Code Challenge
+# DEUS Bank — Customer Support AI
 
-## 🎯 Business Requirements
-
-> A customer calls the bank, hoping to get help, but instead, they get lost in an endless phone menu maze. Nightmare, right? Well, not on our watch!
-
-Your mission is to build an **AI-powered customer support system** where multiple agents work together to identify the customer and route them to the right place—without the usual pain of endless phone menus.
-
-Here's how the dream team of AI agents rolls:
-
--   **👋 Agent 1: The Greeter**  
-    This is the friendly face of the bank. It starts the conversation, asks for identification, and makes sure the customer is legitimate.
-
--   **🛡️ Agent 2: The Bouncer**  
-    Once the customer is identified, this agent steps in. It decides: are they a regular customer, a premium client, or not a customer at all?
-
--   **📞 Agent 3: The Specialist**  
-    If the customer has a specific, high-value request (like “Help me with my yacht insurance” 🛥️), this agent ensures they get to the right expert.
-
--   **📜 Guardrails: The Rule Enforcer**  
-    This component keeps everything safe, professional, and aligned with bank policies. No accidental million-dollar loan approvals!
-
-
-## 🛠️ Technical Requirements
-
-Here’s what you need to build and how to deliver it.
-
--   **🏗️ Framework & Structure**: You are free to use `LangGraph` or a similar framework. While a Jupyter Notebook is an acceptable format, remember that the overall structure and design of your solution will be a key part of the evaluation.
--   **🧠 LLM Choice**: You can use any LLM you prefer. Just remember to remove your API keys before submitting!
--   **⚙️ Core Logic**: The system must verify a customer by matching at least **two out of three** details (`name`, `phone`, `iban`) before asking their secret question.
--   **🚀 API Endpoint**: To simulate a real-world application, expose your solution via a `FastAPI` endpoint.
-
-<br>
-
-<details>
-<summary><strong>📄 Click to see example data structures</strong></summary>
-
-```python
-# Example of user data for verification
-example_of_user = {
-  "name": "Lisa",
-  "phone": "+1122334455",
-  "iban": "DE89370400440532013000",
-  "secret" : "Which is the name of my dog?",
-  "answer" : "Yoda"
-}
-```
-
-```python
-# Example of account data to determine status
-example_of_account = {
-  "iban": "DE89370400440532013000",
-  "premiun" : True
-}
-```
-</details>
-
-<br>
-
-<details>
-<summary><strong>💬 Click to see expected responses</strong></summary>
-
-> **Note**: Your responses can be different, but be careful not to leak sensitive user data. For example, phone numbers should only be shown to verified clients.
-
--   **✅ Premium Client:**
-    > "Thank you for reaching out regarding your account issue. As a premium client, we value your experience and are here to assist you. For immediate support, please contact our dedicated support department at +1999888999..."
--   **✅ Regular Client:**
-    > "I'm sorry to hear that you're having trouble with your account. Since you're a regular client, I recommend that you call our support department at +1112112112 for assistance..."
--   **❌ Non-Client:**
-    > "Thank you for reaching out. It seems that you are not currently a client of DEUS Bank. I recommend that you contact your bank's support department directly for assistance..."
-</details>
-
-## 📦 Deliverables
-
-1.  **📈 Architecture Diagram**: A visual diagram (like the example below) illustrating your system's workflow.
-2.  **💻 Working Code**: Your full implementation, including unit tests for key logic.
-3.  **📄 Pull Request(s)**: Use a GitFlow-style approach to submit your features in one or more PRs.
-4.  **💬 Realistic Commits**: A clean Git history with logical, well-described commits.
-5.  **📤 Submission**: Please commit and push your solution directly to this repository.
-
-![Graph example](lang-graph.png?raw=true "Graph example")
+An AI-powered customer support system for DEUS Bank, built with LangGraph and Gemini. Handles customer authentication, account queries, complaint logging, and specialist routing through a multi-agent state machine exposed via a REST API.
 
 ---
 
-## ✨ Bonus Points
+## Features
 
-Want to go the extra mile? Consider exploring these optional extensions:
+- **Multi-agent state machine** — Greeter, Bouncer, and Specialist agents orchestrated via LangGraph
+- **2-of-3 authentication** — customers authenticate with any two of: full name, phone number, IBAN
+- **Secret question verification** — second factor after identity match
+- **Account queries** — balance, IBAN, account number (responds only to what was asked)
+- **Specialist routing** — routes to human specialists for insurance, investments, or accounts topics
+- **Complaint logging** — logs complaints to `src/data/complaints.json`
+- **Conversational memory** — agent recalls previous turns within a session
+- **Prompt injection hardening** — sanitises history to block system-override attacks
+- **Text-to-speech** — agent responses spoken aloud (macOS, `pyttsx3`)
+- **REST API** — FastAPI with API key auth and CORS support
+- **Docker** — multi-stage image, secrets never baked in
 
--   **🗣️ Add a Voice Interface**: Integrate text-to-speech (TTS) and speech-to-text (STT) to give your AI a voice.
--   **🔒 Implement Advanced Guardrails**: Add more sophisticated safety mechanisms to prevent harmful, off-topic, or irrelevant responses.
--   **📚 Incorporate Conversation History**: Give your system memory to allow for more natural, context-aware conversations.
--   **🧪 Add Comprehensive Testing**: Implement a robust testing suite to ensure code quality and reliability.
--   **🚀 Implement CI/CD**: Set up a continuous integration and deployment pipeline to automate testing and releases.
--   **🐳 Dockerize the Application**: Package the solution into a Docker container for easy deployment and scalability.
+---
 
-Now, go forth and build the most epic AI-powered customer support ever! 🚀
+## Project Structure
+
+```
+customer_support/
+├── src/
+│   ├── api.py                  # FastAPI application
+│   ├── graph.py                # LangGraph state machine
+│   ├── main.py                 # CLI chat interface
+│   ├── agents/
+│   │   ├── greeter.py          # Authentication agent
+│   │   ├── bouncer.py          # Account type verification agent
+│   │   ├── specialist.py       # Service routing agent
+│   │   └── tools.py            # LangChain tools
+│   ├── ai/
+│   │   ├── llm.py              # Gemini model setup
+│   │   └── prompt.yaml         # All agent prompts
+│   ├── config/
+│   │   └── models.py           # Pydantic models
+│   ├── data/
+│   │   ├── users.json          # Customer records
+│   │   ├── accounts.json       # Account data (balance, IBAN, etc.)
+│   │   ├── employees.json      # Specialist employees
+│   │   └── complaints.json     # Logged complaints
+│   └── utils/
+│       ├── database_queries.py # Async JSON data access
+│       ├── get_prompts.py      # Prompt loader
+│       └── tts.py              # Text-to-speech module
+├── docs/
+│   └── notes.md                # Technical development notes
+├── logs/                       # Chat session logs
+├── Dockerfile
+├── .dockerignore
+├── .env.example
+└── pyproject.toml
+```
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+- Python 3.14+
+- [uv](https://docs.astral.sh/uv/)
+- Docker (optional)
+
+### Setup
+
+```bash
+# Clone and enter the project
+cd customer_support
+
+# Install dependencies
+uv sync
+
+# Copy and fill in environment variables
+cp .env.example .env
+# Edit .env with your GOOGLE_API_KEY and API_KEY
+```
+
+### Run CLI (with TTS)
+
+```bash
+PYTHONPATH=src /path/to/.venv/bin/python src/main.py
+```
+
+### Run API server
+
+```bash
+PYTHONPATH=src /path/to/.venv/bin/python -m uvicorn api:app \
+  --host 127.0.0.1 --port 8000 --app-dir src
+```
+
+### Run with Docker
+
+```bash
+docker build -t deus-bank-api .
+docker run -d --name deus-bank -p 8000:8000 --env-file .env deus-bank-api
+```
+
+---
+
+## API
+
+All session endpoints require the header `X-API-Key: <your API_KEY>`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check (no auth) |
+| `POST` | `/sessions` | Start a new chat session |
+| `POST` | `/sessions/{session_id}/message` | Send a message, receive agent reply |
+
+**Response shape:**
+```json
+{
+  "session_id": "uuid",
+  "messages": ["Agent reply..."],
+  "done": false
+}
+```
+
+`done: true` means the conversation ended — no further messages can be sent on this session.
+
+**Frontend integration example:**
+```js
+// 1. Open a session (user opens the chatbot)
+const { session_id, messages } = await fetch('/sessions', {
+  method: 'POST',
+  headers: { 'X-API-Key': API_KEY }
+}).then(r => r.json())
+
+// 2. Send each user message
+const res = await fetch(`/sessions/${session_id}/message`, {
+  method: 'POST',
+  headers: { 'X-API-Key': API_KEY, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ message: userInput })
+}).then(r => r.json())
+// res.messages → agent replies to display
+// res.done → disable input when true
+```
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `GOOGLE_API_KEY` | ✅ | Gemini API key |
+| `API_KEY` | ✅ | Secret key for API authentication |
+| `LANGSMITH_API_KEY` | Optional | LangSmith tracing key |
+| `LANGSMITH_TRACING` | Optional | Enable tracing (`true`/`false`) |
+| `ALLOWED_ORIGINS` | Optional | CORS origins (comma-separated). Default: `*` — restrict in production |
+
+---
+
+## Tech Stack
+
+| | |
+|---|---|
+| LLM | Gemini 2.5 Flash Lite via `langchain-google-genai` |
+| Orchestration | LangGraph `StateGraph` + `InMemorySaver` |
+| API | FastAPI + uvicorn |
+| TTS | pyttsx3 (macOS `nsss`, Samantha voice) |
+| Package manager | uv |
+| Containerisation | Docker (multi-stage build) |

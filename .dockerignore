@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info/
+build/
+dist/
+wheels/
+
+# Virtual environment
+.venv/
+
+# Environment — never bake secrets into the image
+.env
+
+# Logs
+logs/
+
+# Tests
+src/test_*.py
+
+# Dev/tooling
+.git/
+.gitignore
+.ruff_cache/
+.mypy_cache/

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "EMP-001",
+    "name": "Ana Ferreira",
+    "skills": ["insurance", "accounts"]
+  },
+  {
+    "id": "EMP-002",
+    "name": "Miguel Santos",
+    "skills": ["investments", "accounts"]
+  },
+  {
+    "id": "EMP-003",
+    "name": "Sofia Rodrigues",
+    "skills": ["insurance", "investments"]
+  }
+]

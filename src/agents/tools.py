@@ -9,7 +9,7 @@ from utils.database_queries import (
     get_all_employees,
     append_complaint,
 )
-from config.models import Skill
+from config.models import Skill, AccountSummary
 
 
 @tool 
@@ -48,17 +48,26 @@ def delegate_hitl(skill: Skill) -> str:
 
 @tool
 def get_account_summary(nif: str) -> str:
-    """Return a summary of the authenticated customer's account: account number, IBAN and account type.
-    Use whenever the customer asks to see their account details.
+    """Return a summary of the authenticated customer's account.
+
+    Available data fields (see AccountSummary model):
+    - account_number: unique account identifier.
+    - iban: IBAN for transfers and identification.
+    - account_type: 'Premium' or 'Regular'.
+    - balance: current account balance in EUR.
+
+    Use whenever the customer asks about their account details, balance, IBAN, or account number.
+    Always present the balance in the response when the customer asks about their balance.
     """
     account = asyncio.run(get_account_by_nif(nif))
     if account:
-        account_type = "Premium" if account.get("premium") else "Regular"
-        return json.dumps({
-            "account_number": account["account_number"],
-            "iban": account["iban"],
-            "account_type": account_type,
-        })
+        summary = AccountSummary(
+            account_number=account["account_number"],
+            iban=account["iban"],
+            account_type="Premium" if account.get("premium") else "Regular",
+            balance=account.get("balance", 0.0),
+        )
+        return summary.model_dump_json()
     return json.dumps({"error": "Account not found."})
 
 

@@ -17,6 +17,19 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
+# System dependencies:
+#   ffmpeg      — required by openai-whisper for audio decoding
+#   espeak-ng   — pyttsx3 TTS engine on Linux
+#   libespeak-ng1 — runtime shared library for espeak-ng
+# pyttsx3's Linux driver calls the binary "espeak"; espeak-ng only ships
+# "espeak-ng", so we add a compatibility symlink.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        espeak-ng \
+        libespeak-ng1 \
+    && ln -sf /usr/bin/espeak-ng /usr/bin/espeak \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the venv from builder
 COPY --from=builder /app/.venv /app/.venv
 

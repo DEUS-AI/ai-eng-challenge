@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DEUS Bank — Customer Support</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f1923;
+      color: #e0e6ed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 0.3rem; color: #7eb8f7; }
+    .sub { font-size: 0.8rem; color: #637080; margin-bottom: 1.5rem; }
+
+    .config {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 1.2rem;
+      width: 100%;
+      max-width: 560px;
+    }
+    .config input {
+      flex: 1;
+      min-width: 140px;
+      padding: 0.5rem 0.7rem;
+      border: 1px solid #2a3748;
+      border-radius: 6px;
+      background: #1b2535;
+      color: #e0e6ed;
+      font-size: 0.85rem;
+    }
+    .config button {
+      padding: 0.5rem 1.2rem;
+      border: none;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .config button:hover { background: #1d4ed8; }
+
+    #status {
+      font-size: 0.8rem;
+      color: #637080;
+      margin-bottom: 1rem;
+      min-height: 1.2rem;
+    }
+    #status.ok  { color: #4ade80; }
+    #status.err { color: #f87171; }
+
+    /* ── tabs ── */
+    .tabs {
+      display: flex;
+      width: 100%;
+      max-width: 560px;
+      margin-bottom: 0;
+      border-bottom: 2px solid #1e2d3d;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 0.55rem 0;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      color: #637080;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn.active { color: #7eb8f7; border-bottom-color: #7eb8f7; }
+    .tab-btn:hover:not(.active) { color: #a8c4e0; }
+
+    .tab-panel { display: none; width: 100%; max-width: 560px; }
+    .tab-panel.active { display: flex; flex-direction: column; align-items: center; }
+
+    /* ── chat bubbles ── */
+    #chat {
+      width: 100%;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+      margin: 1rem 0;
+      min-height: 200px;
+      max-height: 340px;
+    }
+    .bubble {
+      max-width: 80%;
+      padding: 0.6rem 0.9rem;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+    .bubble.agent  { background: #1e3a5f; align-self: flex-start; }
+    .bubble.user   { background: #163a2a; align-self: flex-end; color: #86efac; }
+    .bubble.system { background: #2a1f0a; align-self: center; color: #fbbf24; font-size: 0.78rem; }
+
+    /* ── text input area ── */
+    .text-row {
+      display: flex;
+      width: 100%;
+      gap: 0.5rem;
+      margin-top: 0.2rem;
+    }
+    #textInput {
+      flex: 1;
+      padding: 0.55rem 0.8rem;
+      border: 1px solid #2a3748;
+      border-radius: 8px;
+      background: #1b2535;
+      color: #e0e6ed;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    #textInput:focus { border-color: #2563eb; }
+    #sendBtn {
+      padding: 0.55rem 1.1rem;
+      border: none;
+      border-radius: 8px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    #sendBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+    #sendBtn:hover:not(:disabled) { background: #1d4ed8; }
+
+    /* ── voice button ── */
+    #talkBtn {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: 3px solid #2563eb;
+      background: #1b2535;
+      color: #7eb8f7;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      user-select: none;
+      -webkit-user-select: none;
+      margin-top: 1rem;
+    }
+    #talkBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+    #talkBtn.recording {
+      background: #7f1d1d;
+      border-color: #ef4444;
+      color: #fca5a5;
+      transform: scale(1.08);
+    }
+    #talkBtn.thinking {
+      background: #1f2d44;
+      border-color: #7eb8f7;
+      color: #7eb8f7;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
+    }
+    #hint { font-size: 0.75rem; color: #637080; margin-top: 0.6rem; }
+
+    #endBadge {
+      display: none;
+      margin-top: 0.8rem;
+      padding: 0.4rem 1rem;
+      background: #1f2d1f;
+      border: 1px solid #4ade80;
+      border-radius: 20px;
+      color: #4ade80;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>DEUS Bank Customer Support</h1>
+  <p class="sub">Voice + Text interface</p>
+
+  <div class="config">
+    <input id="apiUrl" value="http://localhost:8000" placeholder="API URL" />
+    <input id="apiKey" type="password" placeholder="API Key" />
+    <button id="connectBtn">Connect</button>
+  </div>
+
+  <div id="status">Not connected.</div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="text">💬 Text</button>
+    <button class="tab-btn"        data-tab="voice">🎤 Voice</button>
+  </div>
+
+  <!-- TEXT TAB -->
+  <div class="tab-panel active" id="tab-text">
+    <div id="chat"></div>
+    <div class="text-row">
+      <input id="textInput" placeholder="Type a message…" disabled />
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+  </div>
+
+  <!-- VOICE TAB -->
+  <div class="tab-panel" id="tab-voice">
+    <div id="chatVoice" style="
+      width:100%; overflow-y:auto; display:flex; flex-direction:column;
+      gap:0.7rem; margin:1rem 0; min-height:200px; max-height:340px;
+    "></div>
+    <button id="talkBtn" disabled>🎤 Start</button>
+    <div id="hint">Click to start recording, click again to send</div>
+  </div>
+
+  <div id="endBadge">Session ended — reload to start a new one</div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const apiUrlEl   = $('apiUrl');
+    const apiKeyEl   = $('apiKey');
+    const connectBtn = $('connectBtn');
+    const statusEl   = $('status');
+    const chatEl     = $('chat');
+    const chatVoice  = $('chatVoice');
+    const textInput  = $('textInput');
+    const sendBtn    = $('sendBtn');
+    const talkBtn    = $('talkBtn');
+    const endBadge   = $('endBadge');
+
+    let sessionId   = null;
+    let mediaRec    = null;
+    let audioChunks = [];
+    let isDone      = false;
+
+    // ── tabs ─────────────────────────────────────────────────────────────────
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        $(`tab-${btn.dataset.tab}`).classList.add('active');
+      });
+    });
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    function setStatus(msg, cls = '') {
+      statusEl.className = cls;
+      statusEl.textContent = msg;
+    }
+
+    function addBubble(container, text, role) {
+      const d = document.createElement('div');
+      d.className = `bubble ${role}`;
+      d.textContent = text;
+      container.appendChild(d);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function headers(json = false) {
+      const h = { 'X-API-Key': apiKeyEl.value.trim() };
+      if (json) h['Content-Type'] = 'application/json';
+      return h;
+    }
+
+    function baseUrl() {
+      return apiUrlEl.value.trim().replace(/\/$/, '');
+    }
+
+    function markDone() {
+      isDone = true;
+      sendBtn.disabled = true;
+      textInput.disabled = true;
+      talkBtn.disabled = true;
+      talkBtn.textContent = 'Session ended';
+      endBadge.style.display = 'block';
+      setStatus('Conversation complete.', 'ok');
+    }
+
+    // ── connect ───────────────────────────────────────────────────────────────
+
+    connectBtn.addEventListener('click', async () => {
+      setStatus('Connecting…');
+      try {
+        const res = await fetch(`${baseUrl()}/sessions`, {
+          method: 'POST',
+          headers: headers(),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        sessionId = data.session_id;
+        (data.messages || []).forEach(m => {
+          addBubble(chatEl,    m, 'agent');
+          addBubble(chatVoice, m, 'agent');
+        });
+        if (data.done) { markDone(); return; }
+        setStatus(`Session: ${sessionId.slice(0, 8)}…`, 'ok');
+        textInput.disabled = false;
+        sendBtn.disabled   = false;
+        talkBtn.disabled   = false;
+        connectBtn.disabled = true;
+      } catch (e) {
+        setStatus(`Error: ${e.message}`, 'err');
+      }
+    });
+
+    // ── text ──────────────────────────────────────────────────────────────────
+
+    sendBtn.addEventListener('click', sendText);
+    textInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } });
+
+    async function sendText() {
+      const msg = textInput.value.trim();
+      if (!msg || !sessionId || isDone) return;
+      textInput.value = '';
+      addBubble(chatEl, msg, 'user');
+      sendBtn.disabled  = true;
+      textInput.disabled = true;
+
+      try {
+        const res = await fetch(`${baseUrl()}/sessions/${sessionId}/message`, {
+          method: 'POST',
+          headers: headers(true),
+          body: JSON.stringify({ message: msg }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        (data.messages || []).forEach(m => addBubble(chatEl, m, 'agent'));
+        if (data.done) { markDone(); return; }
+      } catch (e) {
+        addBubble(chatEl, `⚠ ${e.message}`, 'system');
+      } finally {
+        if (!isDone) {
+          sendBtn.disabled   = false;
+          textInput.disabled = false;
+          textInput.focus();
+        }
+      }
+    }
+
+    // ── voice ─────────────────────────────────────────────────────────────────
+
+    let isRecording = false;
+
+    talkBtn.addEventListener('click', async () => {
+      if (!sessionId || talkBtn.classList.contains('thinking') || isDone) return;
+      if (!isRecording) await startRecording();
+      else stopRecording();
+    });
+
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRec = new MediaRecorder(stream);
+        mediaRec.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRec.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          await sendVoice();
+        };
+        mediaRec.start();
+        isRecording = true;
+        talkBtn.textContent = '⏹ Stop';
+        talkBtn.classList.add('recording');
+      } catch (e) {
+        setStatus(`Mic error: ${e.message}`, 'err');
+        mediaRec = null;
+      }
+    }
+
+    function stopRecording() {
+      if (!mediaRec || mediaRec.state === 'inactive') return;
+      isRecording = false;
+      mediaRec.stop();
+      mediaRec = null;
+      talkBtn.textContent = 'A processar…';
+      talkBtn.classList.remove('recording');
+      talkBtn.classList.add('thinking');
+      talkBtn.disabled = true;
+    }
+
+    async function sendVoice() {
+      const mimeType = audioChunks[0]?.type || 'audio/webm';
+      const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(audioChunks, { type: mimeType });
+      const form = new FormData();
+      form.append('audio', blob, `recording.${ext}`);
+
+      try {
+        const res = await fetch(`${baseUrl()}/sessions/${sessionId}/voice`, {
+          method: 'POST',
+          headers: headers(),
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const transcript = res.headers.get('X-Transcript') || '';
+        const messages   = JSON.parse(res.headers.get('X-Messages') || '[]');
+        const done       = res.headers.get('X-Session-Done') === 'true';
+
+        if (transcript) addBubble(chatVoice, transcript, 'user');
+        messages.forEach(m => addBubble(chatVoice, m, 'agent'));
+
+        const audioBlob = await res.blob();
+        const url = URL.createObjectURL(audioBlob);
+        const audio = new Audio(url);
+        audio.onended = () => URL.revokeObjectURL(url);
+        audio.play().catch(() => {});
+
+        if (done) { markDone(); return; }
+      } catch (e) {
+        addBubble(chatVoice, `⚠ ${e.message}`, 'system');
+      } finally {
+        if (!isDone) {
+          talkBtn.textContent = '🎤 Start';
+          talkBtn.classList.remove('thinking');
+          talkBtn.disabled = false;
+          isRecording = false;
+        }
+      }
+    }
+  </script>
+</body>
+</html>

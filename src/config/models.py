@@ -38,6 +38,14 @@ class IdentityResult(BaseModel):
     matched_nif: str = ""
 
 
+class AccountField(str, Enum):
+    BALANCE = "balance"
+    IBAN = "iban"
+    ACCOUNT_NUMBER = "account_number"
+    ACCOUNT_TYPE = "account_type"
+    ALL = "all"
+
+
 class AccountSummary(BaseModel):
     """Structured representation of a customer account returned by get_account_summary.
 

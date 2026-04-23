@@ -35,6 +35,7 @@ def chat() -> None:
         "identity_verified": False,
         "account_type": "",
         "user_request": "",
+        "details_retry_count": 0,
         "agent_messages": [],
         "log_lines": [f"# Chat Session — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"],
     }

@@ -12,5 +12,12 @@
     "nif": "234567890",
     "premium": true,
     "balance": 15420.00
+  },
+    {
+    "account_number": "ACC-123",
+    "iban": "ABC",
+    "nif": "123",
+    "premium": true,
+    "balance": 15420.00
   }
 ]

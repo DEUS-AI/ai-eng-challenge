@@ -9,7 +9,7 @@ from utils.database_queries import (
     get_all_employees,
     append_complaint,
 )
-from config.models import Skill, AccountSummary
+from config.models import Skill, AccountSummary, AccountField
 
 
 @tool 
@@ -47,28 +47,36 @@ def delegate_hitl(skill: Skill) -> str:
 
 
 @tool
-def get_account_summary(nif: str) -> str:
-    """Return a summary of the authenticated customer's account.
+def get_account_field(nif: str, field: AccountField) -> str:
+    """Return a single field from the authenticated customer's account.
 
-    Available data fields (see AccountSummary model):
-    - account_number: unique account identifier.
-    - iban: IBAN for transfers and identification.
-    - account_type: 'Premium' or 'Regular'.
-    - balance: current account balance in EUR.
+    Args:
+        nif: the customer's NIF (provided in the user message).
+        field: the specific field to retrieve. Must be one of:
+            - "balance"         → current account balance in EUR
+            - "iban"            → IBAN for transfers and identification
+            - "account_number"  → unique account identifier
+            - "account_type"    → 'Premium' or 'Regular'
+            - "all"             → all fields above
 
-    Use whenever the customer asks about their account details, balance, IBAN, or account number.
-    Always present the balance in the response when the customer asks about their balance.
+    Use this tool whenever the customer asks about their account balance, IBAN,
+    account number, account type, or full account details.
+    Always pass the exact field the customer asked for.
     """
     account = asyncio.run(get_account_by_nif(nif))
-    if account:
-        summary = AccountSummary(
-            account_number=account["account_number"],
-            iban=account["iban"],
-            account_type="Premium" if account.get("premium") else "Regular",
-            balance=account.get("balance", 0.0),
-        )
+    if not account:
+        return json.dumps({"error": "Account not found."})
+
+    summary = AccountSummary(
+        account_number=account["account_number"],
+        iban=account["iban"],
+        account_type="Premium" if account.get("premium") else "Regular",
+        balance=account.get("balance", 0.0),
+    )
+
+    if field == AccountField.ALL:
         return summary.model_dump_json()
-    return json.dumps({"error": "Account not found."})
+    return json.dumps({field.value: getattr(summary, field.value)})
 
 
 @tool

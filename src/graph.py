@@ -49,6 +49,7 @@ class ChatState(TypedDict):
     identity_verified: bool
     account_type: str
     user_request: str
+    details_retry_count: int
     agent_messages: Annotated[list[str], operator.add]
     log_lines: Annotated[list[str], operator.add]
 
@@ -110,6 +111,22 @@ def greeter_verify(state: ChatState) -> dict:
     }
 
 
+_MAX_DETAILS_RETRIES = 2
+
+
+def retry_details(state: ChatState) -> dict:
+    attempt = state.get("details_retry_count", 0) + 1
+    msg = (
+        "I wasn't able to find your details. "
+        "Please provide at least two of the following: full name, phone number, or IBAN."
+    )
+    return {
+        "agent_messages": [msg],
+        "details_retry_count": attempt,
+        "log_lines": [f"\n**Greeter Agent**: {msg}"],
+    }
+
+
 def secret_question_node(state: ChatState) -> dict:
     msg = f"Security question: {state['secret_question']}"
     return {
@@ -120,8 +137,10 @@ def secret_question_node(state: ChatState) -> dict:
 
 def secret_input(state: ChatState) -> dict:
     answer = interrupt("Waiting for secret answer")
+    # Strip whitespace and trailing punctuation added by STT (e.g. "Testing." → "Testing")
+    cleaned = answer.strip().rstrip(".,!?;:")
     return {
-        "secret_answer": answer.strip(),
+        "secret_answer": cleaned,
         "log_lines": [f"\n**You**: {answer}"],
     }
 
@@ -209,44 +228,61 @@ def _sanitize_user_line(line: str) -> str | None:
 
 def specialist(state: ChatState) -> dict:
     """Runs specialist_agent with conversation history for contextual memory."""
-    history = []
     log_lines = state.get("log_lines", [])
-    # Build conversation history — sanitize user turns to prevent history poisoning.
-    conversation: list[str] = []
+    nif = state["matched_nif"]
+    account_type = state["account_type"]
+
+    # Build multi-turn chat history from log_lines so the model has proper
+    # conversational context (assistant/user turns, not a flat string block).
+    turns: list[dict] = []
     for line in log_lines:
         stripped = line.strip()
         if stripped.startswith("**Specialist Agent**:"):
-            conversation.append(stripped)
+            content = stripped[len("**Specialist Agent**: "):]
+            turns.append({"role": "assistant", "content": content})
         elif stripped.startswith("**You**:"):
             safe = _sanitize_user_line(stripped)
             if safe:
-                conversation.append(safe)
-    if conversation:
-        history.append({
-            "role": "system",
-            "content": "Conversation so far:\n" + "\n".join(conversation),
-        })
+                content = safe[len("**You**: "):]
+                turns.append({"role": "user", "content": content})
+
+    # System message is just the prompt (no history block needed)
+    history: list[dict] = []
+
+    # Replay previous turns so the model understands the conversational context
+    history.extend(turns)
+
+    # Append the current request as the final user turn with auth context
     history.append({
         "role": "user",
         "content": (
-            f"Customer NIF: {state['matched_nif']}\n"
-            f"Account type: {state['account_type']}\n\n"
-            f"Customer request: {state['user_request']}"
+            f"[Customer NIF: {nif} | Account type: {account_type}]\n"
+            f"{state['user_request']}"
         ),
     })
     result = specialist_agent.invoke({"messages": history})
+    # Identify which tool (if any) was called in this turn
+    ai_msg_with_tool = next(
+        (m for m in result["messages"]
+         if type(m).__name__ == "AIMessage" and getattr(m, "tool_calls", [])),
+        None,
+    )
+    tool_name = ai_msg_with_tool.tool_calls[0]["name"] if ai_msg_with_tool else None
     tool_msg = next(
         (m for m in result["messages"] if type(m).__name__ == "ToolMessage"),
         None,
     )
-    if tool_msg:
-        # Agent called delegate_hitl — extract skill from the preceding AIMessage tool_call
-        ai_msg = next(
-            (m for m in result["messages"]
-             if type(m).__name__ == "AIMessage" and getattr(m, "tool_calls", [])),
-            None,
-        )
-        skill_value = ai_msg.tool_calls[0]["args"].get("skill") if ai_msg else None
+    # Always prefer a follow-up AIMessage composed by the LLM after the tool call
+    final_ai_msg = next(
+        (m.content for m in reversed(result["messages"])
+         if type(m).__name__ == "AIMessage"
+         and getattr(m, "content", None)
+         and not getattr(m, "tool_calls", [])),
+        None,
+    )
+    if tool_msg and tool_name == "delegate_hitl":
+        # Specialist delegation — build response from employee name
+        skill_value = ai_msg_with_tool.tool_calls[0]["args"].get("skill") if ai_msg_with_tool else None
         try:
             skill = Skill(skill_value)
         except (ValueError, TypeError):
@@ -254,14 +290,6 @@ def specialist(state: ChatState) -> dict:
         parsed = SpecialistDecision(in_scope=True, skill=skill)
         employee_name = tool_msg.content
         account_type = state.get("account_type", "regular").lower()
-        # Use last AIMessage if LLM composed a response after the tool call
-        final_ai_msg = next(
-            (m.content for m in reversed(result["messages"])
-             if type(m).__name__ == "AIMessage"
-             and getattr(m, "content", None)
-             and not getattr(m, "tool_calls", [])),
-            None,
-        )
         if final_ai_msg:
             response = final_ai_msg
         elif employee_name == "no_employee_available":
@@ -281,12 +309,22 @@ def specialist(state: ChatState) -> dict:
             "agent_messages": [response],
             "log_lines": [f"\n**Specialist Agent**: {response}"],
         }
-    # No tool called — agent refused the request
-    refusal = next(
-        (m.content for m in reversed(result["messages"])
-         if getattr(m, "content", None)),
-        "I can only assist you with your own banking services.",
-    )
+    elif tool_msg and final_ai_msg:
+        # Another tool was called (e.g. get_account_summary, log_complaint) —
+        # the LLM already composed a natural-language response after seeing the tool result
+        return {
+            "agent_messages": [final_ai_msg],
+            "log_lines": [f"\n**Specialist Agent**: {final_ai_msg}"],
+        }
+    elif final_ai_msg:
+        # No tool, LLM replied directly (e.g. conversation recall, refusal)
+        parsed = SpecialistDecision(in_scope=False, refusal_message=final_ai_msg)
+        return {
+            "agent_messages": [parsed.refusal_message],
+            "log_lines": [f"\n**Specialist Agent**: {parsed.refusal_message}"],
+        }
+    # Fallback
+    refusal = "I can only assist you with your own banking services."
     parsed = SpecialistDecision(in_scope=False, refusal_message=refusal)
     return {
         "agent_messages": [parsed.refusal_message],
@@ -307,6 +345,8 @@ def farewell(state: ChatState) -> dict:
 def route_after_greeter(state: ChatState) -> str:
     if state.get("secret_question"):
         return "secret_question_node"
+    if state.get("details_retry_count", 0) < _MAX_DETAILS_RETRIES:
+        return "retry_details"
     return "reject_details"
 
 
@@ -338,6 +378,7 @@ def build_graph() -> StateGraph:
     builder.add_node("greeting", greeting)
     builder.add_node("details_input", details_input)
     builder.add_node("greeter_verify", greeter_verify)
+    builder.add_node("retry_details", retry_details)
     builder.add_node("secret_question_node", secret_question_node)
     builder.add_node("secret_input", secret_input)
     builder.add_node("secret_verify", secret_verify)
@@ -355,8 +396,9 @@ def build_graph() -> StateGraph:
     builder.add_conditional_edges(
         "greeter_verify",
         route_after_greeter,
-        {"secret_question_node": "secret_question_node", "reject_details": "reject"},
+        {"secret_question_node": "secret_question_node", "retry_details": "retry_details", "reject_details": "reject"},
     )
+    builder.add_edge("retry_details", "details_input")
     builder.add_edge("secret_question_node", "secret_input")
     builder.add_edge("secret_input", "secret_verify")
     builder.add_conditional_edges(

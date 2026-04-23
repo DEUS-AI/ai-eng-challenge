@@ -1,5 +1,5 @@
 from langchain.agents import create_agent
-from agents.tools import delegate_hitl, get_account_summary, get_available_specialists, log_complaint
+from agents.tools import delegate_hitl, get_account_field, get_available_specialists, log_complaint
 from ai.llm import call_google_generative_ai_model
 from utils.get_prompts import get_prompt
 from config.models import Skill, SKILL_METADATA
@@ -16,7 +16,7 @@ model = call_google_generative_ai_model()
 
 specialist_agent = create_agent(
     model,
-    tools=[delegate_hitl, get_account_summary, get_available_specialists, log_complaint],
+    tools=[delegate_hitl, get_account_field, get_available_specialists, log_complaint],
     system_prompt=SPECIALIST_AGENT_PROMPT,
 )
 

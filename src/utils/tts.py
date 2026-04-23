@@ -1,13 +1,17 @@
+import platform
 import threading
 import pyttsx3
 
-# English (US) voice — Samantha is the standard macOS en_US voice.
-VOICE_ID = "com.apple.voice.compact.en-US.Samantha"
+# macOS uses the nsss driver with Apple's Samantha voice.
+# Linux (Docker) uses the espeak-ng driver; no macOS voice ID is available there.
+_IS_MACOS = platform.system() == "Darwin"
+VOICE_ID = "com.apple.voice.compact.en-US.Samantha" if _IS_MACOS else None
 
 # Shared engine for speak() — reused across calls (say+runAndWait works fine).
 _engine = pyttsx3.init()
 _engine.setProperty("rate", 165)   # words-per-minute (default ~200)
-_engine.setProperty("voice", VOICE_ID)
+if VOICE_ID:
+    _engine.setProperty("voice", VOICE_ID)
 _lock = threading.Lock()
 
 
@@ -27,7 +31,8 @@ def save_speech_to_file(text: str, path: str) -> None:
     with _lock:
         tmp_engine = pyttsx3.init()
         tmp_engine.setProperty("rate", 165)
-        tmp_engine.setProperty("voice", VOICE_ID)
+        if VOICE_ID:
+            tmp_engine.setProperty("voice", VOICE_ID)
         tmp_engine.save_to_file(text, path)
         tmp_engine.runAndWait()
         tmp_engine.stop()

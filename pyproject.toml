@@ -11,7 +11,9 @@ dependencies = [
     "langchain-google-genai",
     "langgraph>=1.1.8",
     "langgraph-checkpoint-sqlite>=3.0.3",
+    "openai-whisper>=20250625",
     "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.26",
     "pyttsx3>=2.99",
     "uvicorn[standard]>=0.34.0",
 ]

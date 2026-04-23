@@ -2,9 +2,11 @@
 DEUS Bank Customer Support — FastAPI interface.
 
 Endpoints:
-  GET  /health                        — liveness check (no auth)
-  POST /sessions                      — start a new chat session
-  POST /sessions/{session_id}/message — send user input, receive agent replies
+  GET  /health                               — liveness check (no auth)
+  POST /sessions                             — start a new chat session
+  POST /sessions/{session_id}/message        — send text, receive text reply (JSON)
+  POST /sessions/{session_id}/message/audio  — send text, receive audio reply (WAV)
+  POST /sessions/{session_id}/voice          — send audio, receive audio reply (WAV) — full voice round-trip
 
 Authentication:
   All session endpoints require the header:
@@ -15,19 +17,24 @@ CORS:
   Defaults to * (all origins) if not set — restrict this in production.
   Example: ALLOWED_ORIGINS=https://my-chatbot.com,http://localhost:3000
 """
+import json
 import os
 import secrets
+import tempfile
 from datetime import datetime
 from typing import Annotated
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 from pydantic import BaseModel
 
 from graph import compile_graph
+from utils.stt import transcribe
+from utils.tts import save_speech_to_file
 
 load_dotenv()
 
@@ -44,6 +51,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-API-Key"],
+    expose_headers=["X-Session-Done", "X-Transcript", "X-Messages"],
 )
 
 _graph = compile_graph()
@@ -102,6 +110,16 @@ def _is_done(session_id: str) -> bool:
     return not bool(_graph.get_state(_config(session_id)).next)
 
 
+def _save_log(session_id: str) -> None:
+    """Persist the session log_lines to logs/ as a markdown file."""
+    log_lines = _graph.get_state(_config(session_id)).values.get("log_lines", [])
+    log_dir = os.path.join(os.path.dirname(__file__), "../logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, f"chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
+    with open(log_path, "w") as f:
+        f.write("\n".join(log_lines))
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 
@@ -129,6 +147,7 @@ def start_session() -> SessionResponse:
         "identity_verified": False,
         "account_type": "",
         "user_request": "",
+        "details_retry_count": 0,
         "agent_messages": [],
         "log_lines": [f"# Chat Session — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"],
     }
@@ -159,8 +178,135 @@ def send_message(session_id: str, body: MessageRequest) -> SessionResponse:
 
     _graph.invoke(Command(resume=body.message), config=_config(session_id))
 
+    done = _is_done(session_id)
+    if done:
+        _save_log(session_id)
     return SessionResponse(
         session_id=session_id,
         messages=_drain_new_messages(session_id),
-        done=_is_done(session_id),
+        done=done,
+    )
+
+
+@app.post(
+    "/sessions/{session_id}/message/audio",
+    dependencies=[Depends(_require_api_key)],
+    responses={200: {"content": {"audio/wav": {}}}},
+)
+def send_message_audio(session_id: str, body: MessageRequest) -> StreamingResponse:
+    """Send user input to an active session and receive the agent's reply as a WAV audio file.
+
+    Response headers:
+      X-Session-Done: 'true' when the conversation has ended, 'false' otherwise.
+      X-Messages: JSON-encoded list of agent reply text (for display alongside audio).
+    """
+    if session_id not in _session_shown:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
+
+    if _is_done(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Session is already closed. Start a new session.",
+        )
+
+    _graph.invoke(Command(resume=body.message), config=_config(session_id))
+
+    new_messages = _drain_new_messages(session_id)
+    done = _is_done(session_id)
+    if done:
+        _save_log(session_id)
+
+    # Synthesise all new messages into a single WAV file
+    combined_text = " ".join(new_messages)
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+    try:
+        save_speech_to_file(combined_text, tmp_path)
+        with open(tmp_path, "rb") as f:
+            audio_bytes = f.read()
+    finally:
+        os.unlink(tmp_path)
+
+    return StreamingResponse(
+        iter([audio_bytes]),
+        media_type="audio/wav",
+        headers={
+            "X-Session-Done": str(done).lower(),
+            "X-Messages": json.dumps(new_messages),
+        },
+    )
+
+
+@app.post(
+    "/sessions/{session_id}/voice",
+    dependencies=[Depends(_require_api_key)],
+    responses={200: {"content": {"audio/wav": {}}}},
+)
+def send_voice(
+    session_id: str,
+    audio: UploadFile = File(..., description="Audio file (WAV, MP3, M4A, OGG, FLAC)"),
+) -> StreamingResponse:
+    """Full voice round-trip: upload audio → STT transcription → agent → TTS reply (WAV).
+
+    Accepts any audio format supported by Whisper (WAV, MP3, M4A, OGG, FLAC).
+
+    Response headers:
+      X-Session-Done:   'true' when the conversation has ended, 'false' otherwise.
+      X-Transcript:     The text Whisper transcribed from the uploaded audio.
+      X-Messages:       JSON-encoded list of agent reply text.
+    """
+    if session_id not in _session_shown:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
+
+    if _is_done(session_id):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Session is already closed. Start a new session.",
+        )
+
+    # Save uploaded audio to a temp file for Whisper
+    suffix = "." + (audio.filename.rsplit(".", 1)[-1] if audio.filename and "." in audio.filename else "wav")
+    tmp_in = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    try:
+        tmp_in.write(audio.file.read())
+        tmp_in.close()
+        user_text = transcribe(tmp_in.name)
+    finally:
+        os.unlink(tmp_in.name)
+
+    if not user_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not transcribe audio. Please speak clearly and try again.",
+        )
+
+    # Run through the graph with the transcribed text
+    _graph.invoke(Command(resume=user_text), config=_config(session_id))
+
+    new_messages = _drain_new_messages(session_id)
+    done = _is_done(session_id)
+    if done:
+        _save_log(session_id)
+
+    # Synthesise agent reply to WAV
+    combined_text = " ".join(new_messages)
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_out_path = tmp_out.name
+    tmp_out.close()
+    try:
+        save_speech_to_file(combined_text, tmp_out_path)
+        with open(tmp_out_path, "rb") as f:
+            audio_bytes = f.read()
+    finally:
+        os.unlink(tmp_out_path)
+
+    return StreamingResponse(
+        iter([audio_bytes]),
+        media_type="audio/wav",
+        headers={
+            "X-Session-Done": str(done).lower(),
+            "X-Transcript": user_text,
+            "X-Messages": json.dumps(new_messages),
+        },
     )

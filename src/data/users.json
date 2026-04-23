@@ -25,5 +25,14 @@
     "account_number": null,
     "secret": "What was the name of your first school?",
     "answer": "Greenwood"
+  },
+    {
+    "name": "Diogo",
+    "phone": "+123",
+    "nif": "123",
+    "iban": "ABC",
+    "account_number": "AC-123",
+    "secret": "What was the name of your first school?",
+    "answer": "Testing"
   }
 ]

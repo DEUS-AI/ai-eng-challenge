@@ -2,11 +2,13 @@
 
 import json
 import aiofiles
+from datetime import datetime
 
 
 user_accounts_path = "src/data/users.json"
 accounts_type_path = "src/data/accounts.json"
 employees_path = "src/data/employees.json"
+complaints_path = "src/data/complaints.json"
 
 
 async def get_user_by_nif(nif: str):
@@ -71,3 +73,38 @@ async def get_personalized_employee(skill: str):
         if skill in employee["skills"]:
             return employee
     return None
+
+
+async def get_account_by_nif(nif: str):
+    """Fetch account record (account_number, iban, premium) by NIF."""
+    async with aiofiles.open(accounts_type_path, "r") as f:
+        content = await f.read()
+    accounts = json.loads(content)
+    for account in accounts:
+        if account["nif"] == nif:
+            return account
+    return None
+
+
+async def get_all_employees():
+    """Return every employee with their skills."""
+    async with aiofiles.open(employees_path, "r") as f:
+        content = await f.read()
+    return json.loads(content)
+
+
+async def append_complaint(nif: str, complaint: str) -> None:
+    """Append a new complaint entry to complaints.json."""
+    try:
+        async with aiofiles.open(complaints_path, "r") as f:
+            content = await f.read()
+        complaints = json.loads(content)
+    except (FileNotFoundError, json.JSONDecodeError):
+        complaints = []
+    complaints.append({
+        "nif": nif,
+        "complaint": complaint,
+        "timestamp": datetime.now().isoformat(),
+    })
+    async with aiofiles.open(complaints_path, "w") as f:
+        await f.write(json.dumps(complaints, indent=2))

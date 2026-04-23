@@ -228,7 +228,11 @@ def specialist(state: ChatState) -> dict:
         })
     history.append({
         "role": "user",
-        "content": f"Account type: {state['account_type']}\n\nCustomer request: {state['user_request']}",
+        "content": (
+            f"Customer NIF: {state['matched_nif']}\n"
+            f"Account type: {state['account_type']}\n\n"
+            f"Customer request: {state['user_request']}"
+        ),
     })
     result = specialist_agent.invoke({"messages": history})
     tool_msg = next(

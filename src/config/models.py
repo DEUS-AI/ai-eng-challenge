@@ -38,6 +38,21 @@ class IdentityResult(BaseModel):
     matched_nif: str = ""
 
 
+class AccountSummary(BaseModel):
+    """Structured representation of a customer account returned by get_account_summary.
+
+    Fields:
+    - account_number: the unique account identifier (e.g. ACC-001).
+    - iban: the IBAN for bank transfers and identification.
+    - account_type: 'Premium' for premium customers, 'Regular' otherwise.
+    - balance: current account balance in EUR (e.g. 1250.75).
+    """
+    account_number: str
+    iban: str
+    account_type: str
+    balance: float
+
+
 class AccountResult(BaseModel):
     """Output of the account type lookup step."""
     account_type: str

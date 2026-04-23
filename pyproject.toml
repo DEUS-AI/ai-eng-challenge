@@ -11,6 +11,7 @@ dependencies = [
     "langgraph>=1.1.8",
     "langgraph-checkpoint-sqlite>=3.0.3",
     "python-dotenv>=1.2.2",
+    "pyttsx3>=2.99",
 ]
 
 [tool.uv]

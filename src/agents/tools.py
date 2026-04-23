@@ -1,8 +1,15 @@
 import json
 import asyncio
 from langchain.tools import tool
-from utils.database_queries import get_user_by_details, get_account_type, get_personalized_employee
-from config.models import Skill
+from utils.database_queries import (
+    get_user_by_details,
+    get_account_type,
+    get_personalized_employee,
+    get_account_by_nif,
+    get_all_employees,
+    append_complaint,
+)
+from config.models import Skill, AccountSummary
 
 
 @tool 
@@ -30,12 +37,55 @@ def verify_identity(name: str = "", phone: str = "", iban: str = "") -> str:
 @tool
 def delegate_hitl(skill: Skill) -> str:
     """Delegate to human agent based on the required skill.
-    
+
     Available skills: insurance, investments, accounts.
     """
     employee = asyncio.run(get_personalized_employee(skill.value))
     if employee:
         return employee['name']
-    
     return "no_employee_available"
+
+
+@tool
+def get_account_summary(nif: str) -> str:
+    """Return a summary of the authenticated customer's account.
+
+    Available data fields (see AccountSummary model):
+    - account_number: unique account identifier.
+    - iban: IBAN for transfers and identification.
+    - account_type: 'Premium' or 'Regular'.
+    - balance: current account balance in EUR.
+
+    Use whenever the customer asks about their account details, balance, IBAN, or account number.
+    Always present the balance in the response when the customer asks about their balance.
+    """
+    account = asyncio.run(get_account_by_nif(nif))
+    if account:
+        summary = AccountSummary(
+            account_number=account["account_number"],
+            iban=account["iban"],
+            account_type="Premium" if account.get("premium") else "Regular",
+            balance=account.get("balance", 0.0),
+        )
+        return summary.model_dump_json()
+    return json.dumps({"error": "Account not found."})
+
+
+@tool
+def get_available_specialists() -> str:
+    """Return the list of available specialist employees and the topics each one handles.
+    Use when the customer asks who can help them or which specialist covers a given topic.
+    """
+    employees = asyncio.run(get_all_employees())
+    result = [{"name": e["name"], "skills": e["skills"]} for e in employees]
+    return json.dumps(result)
+
+
+@tool
+def log_complaint(nif: str, complaint: str) -> str:
+    """Register a customer complaint. Summarise the complaint in one sentence before calling.
+    Use when the customer explicitly wants to file a complaint or report a problem.
+    """
+    asyncio.run(append_complaint(nif, complaint))
+    return "Your complaint has been registered. A specialist will review it shortly."
 

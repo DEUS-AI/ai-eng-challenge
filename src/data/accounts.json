@@ -1,0 +1,23 @@
+[
+  {
+    "account_number": "ACC-001",
+    "iban": "DE89370400440532013000",
+    "nif": "123456789",
+    "premium": false,
+    "balance": 1250.75
+  },
+  {
+    "account_number": "ACC-002",
+    "iban": "PT50000201231234567890154",
+    "nif": "234567890",
+    "premium": true,
+    "balance": 15420.00
+  },
+    {
+    "account_number": "ACC-123",
+    "iban": "ABC",
+    "nif": "123",
+    "premium": true,
+    "balance": 10420.00
+  }
+]

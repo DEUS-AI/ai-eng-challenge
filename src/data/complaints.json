@@ -1,0 +1,12 @@
+[
+  {
+    "nif": "123456789",
+    "complaint": "Customer is having an issue with their account.",
+    "timestamp": "2026-04-23T23:47:28.969617"
+  },
+  {
+    "nif": "234567890",
+    "complaint": "The customer is having an issue with their account.",
+    "timestamp": "2026-04-24T09:35:06.934142"
+  }
+]

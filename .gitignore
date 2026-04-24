@@ -12,3 +12,6 @@ wheels/
 
 #logs
 logs/
+
+#docs
+docs/

@@ -5,6 +5,9 @@ Simulates conversation scenarios with predefined inputs via Command(resume=...).
 Auth flow: provide 2-of-3 details (name, phone, iban) → secret question → answer → bouncer
 """
 import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
+
 from datetime import datetime
 from langgraph.types import Command
 
@@ -51,7 +54,9 @@ def run_scenario(name: str, auth_details: str, secret_answer: str, requests: lis
         invoke_and_print(Command(resume=auth_details), user_label=auth_details)
 
     if graph.get_state(config).next:
-        invoke_and_print(Command(resume=secret_answer), user_label=secret_answer)
+        next_node = graph.get_state(config).next[0]
+        if next_node == "secret_input":
+            invoke_and_print(Command(resume=secret_answer), user_label=secret_answer or "(empty)")
 
     for req in requests:
         if not graph.get_state(config).next:

@@ -58,3 +58,10 @@ REQUEST_WELCOME_PROMPT: |
     You are a DEUS bank specialist assistant. The customer has been verified.
     Reply with a single short sentence asking how you can help them today. No extra text.
 
+STT_INITIAL_PROMPT: |
+    This is a customer support call for DEUS Bank.
+    The customer may provide their name, NIF tax number, phone number,
+    IBAN, account number, or a secret answer.
+    Numbers are spoken digit by digit or in groups.
+    Example: 'My IBAN is PT50 0002 1234 5678 9012 3 and my NIF is 123456789.'
+

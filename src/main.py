@@ -65,6 +65,3 @@ def chat() -> None:
         state = graph.get_state(config).values
         save_log(state.get("log_lines", []))
 
-
-if __name__ == "__main__":
-    chat()

@@ -19,7 +19,7 @@ import time
 import subprocess
 import tempfile
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
 from utils.tts import speak
 
 # ── ANSI helpers ──────────────────────────────────────────────────────────────

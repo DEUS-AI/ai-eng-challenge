@@ -1,28 +1,18 @@
-"""
-Speech-to-text using OpenAI Whisper (local, free, no API key required).
-
-The model is loaded once at import time and reused across calls.
-Default model: 'small' — better accuracy for names, numbers and banking terms.
-Override with the STT_MODEL env var (tiny | base | small | medium | large).
-"""
 import os
 import threading
 
 import whisper
 
+from config.logger import get_logger
+from utils.get_prompts import get_prompt
+
+logger = get_logger(__name__)
+
 _MODEL_NAME = os.environ.get("STT_MODEL", "small")
 _model = None
 _model_lock = threading.Lock()
 
-# Initial prompt gives Whisper vocabulary context so it transcribes banking
-# terms, proper names, IBANs, phone numbers and NIF codes more accurately.
-_INITIAL_PROMPT = (
-    "This is a customer support call for DEUS Bank. "
-    "The customer may provide their name, NIF tax number, phone number, "
-    "IBAN, account number, or a secret answer. "
-    "Numbers are spoken digit by digit or in groups. "
-    "Example: 'My IBAN is PT50 0002 1234 5678 9012 3 and my NIF is 123456789.'"
-)
+_INITIAL_PROMPT = get_prompt("STT_INITIAL_PROMPT")
 
 
 def _get_model() -> whisper.Whisper:
@@ -31,7 +21,9 @@ def _get_model() -> whisper.Whisper:
     if _model is None:
         with _model_lock:
             if _model is None:
+                logger.info("Loading Whisper model '%s'", _MODEL_NAME)
                 _model = whisper.load_model(_MODEL_NAME)
+                logger.info("Whisper model '%s' loaded", _MODEL_NAME)
     return _model
 
 
@@ -44,6 +36,13 @@ def transcribe(audio_path: str) -> str:
     Returns:
         Transcribed text string (stripped).
     """
-    model = _get_model()
-    result = model.transcribe(audio_path, fp16=False, initial_prompt=_INITIAL_PROMPT)
-    return result["text"].strip()
+    logger.debug("Transcribing: %s", audio_path)
+    try:
+        model = _get_model()
+        result = model.transcribe(audio_path, fp16=False, initial_prompt=_INITIAL_PROMPT)
+        text = result["text"].strip()
+    except Exception:
+        logger.exception("Transcription failed for: %s", audio_path)
+        raise
+    logger.info("Transcription result: %r", text[:80])
+    return text

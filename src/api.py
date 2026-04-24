@@ -1,22 +1,3 @@
-"""
-DEUS Bank Customer Support — FastAPI interface.
-
-Endpoints:
-  GET  /health                               — liveness check (no auth)
-  POST /sessions                             — start a new chat session
-  POST /sessions/{session_id}/message        — send text, receive text reply (JSON)
-  POST /sessions/{session_id}/message/audio  — send text, receive audio reply (WAV)
-  POST /sessions/{session_id}/voice          — send audio, receive audio reply (WAV) — full voice round-trip
-
-Authentication:
-  All session endpoints require the header:
-    X-API-Key: <value of API_KEY env var>
-
-CORS:
-  Set ALLOWED_ORIGINS in .env as a comma-separated list of allowed origins.
-  Defaults to * (all origins) if not set — restrict this in production.
-  Example: ALLOWED_ORIGINS=https://my-chatbot.com,http://localhost:3000
-"""
 import json
 import os
 import secrets
@@ -32,9 +13,13 @@ from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 from pydantic import BaseModel
 
+from config.logger import get_logger
+from config.models import MessageRequest, SessionResponse
 from graph import compile_graph
 from utils.stt import transcribe
 from utils.tts import save_speech_to_file
+
+logger = get_logger(__name__)
 
 load_dotenv()
 
@@ -56,6 +41,7 @@ app.add_middleware(
 
 _graph = compile_graph()
 _session_shown: dict[str, int] = {}  # tracks messages already delivered per session
+_session_log_path: dict[str, str] = {}  # log file path per session, set at session creation
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -77,29 +63,17 @@ def _require_api_key(x_api_key: Annotated[str, Header()]) -> None:
         )
 
 
-# ── Pydantic models ───────────────────────────────────────────────────────────
-
-
-class MessageRequest(BaseModel):
-    message: str
-
-
-class SessionResponse(BaseModel):
-    session_id: str
-    messages: list[str]
-    done: bool  # True when the conversation has ended and the session cannot accept more messages
-
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _config(session_id: str) -> dict:
+def _thread_config(session_id: str) -> dict:
+    """Build the LangGraph thread config dict for the given session."""
     return {"configurable": {"thread_id": session_id}}
 
 
-def _drain_new_messages(session_id: str) -> list[str]:
+def _pop_new_messages(session_id: str) -> list[str]:
     """Return messages added since the last call for this session."""
-    all_messages = _graph.get_state(_config(session_id)).values.get("agent_messages", [])
+    all_messages = _graph.get_state(_thread_config(session_id)).values.get("agent_messages", [])
     shown = _session_shown.get(session_id, 0)
     new = all_messages[shown:]
     _session_shown[session_id] = len(all_messages)
@@ -107,15 +81,20 @@ def _drain_new_messages(session_id: str) -> list[str]:
 
 
 def _is_done(session_id: str) -> bool:
-    return not bool(_graph.get_state(_config(session_id)).next)
+    """Return True when the graph has no pending nodes (conversation is fully closed)."""
+    return not bool(_graph.get_state(_thread_config(session_id)).next)
 
 
 def _save_log(session_id: str) -> None:
-    """Persist the session log_lines to logs/ as a markdown file."""
-    log_lines = _graph.get_state(_config(session_id)).values.get("log_lines", [])
-    log_dir = os.path.join(os.path.dirname(__file__), "../logs")
-    os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, f"chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
+    """Persist the session log_lines to the session's log file (overwriting on each call).
+
+    The log path is fixed at session creation so partial logs are preserved
+    even if the client disconnects before the conversation ends.
+    """
+    log_lines = _graph.get_state(_thread_config(session_id)).values.get("log_lines", [])
+    log_path = _session_log_path.get(session_id)
+    if not log_path:
+        return
     with open(log_path, "w") as f:
         f.write("\n".join(log_lines))
 
@@ -139,6 +118,12 @@ def start_session() -> SessionResponse:
     session_id = str(uuid4())
     _session_shown[session_id] = 0
 
+    now = datetime.now()
+    log_dir = os.path.join(os.path.dirname(__file__), "../logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, f"chat_{now.strftime('%Y%m%d_%H%M%S')}_{session_id[:8]}.md")
+    _session_log_path[session_id] = log_path
+
     initial_state = {
         "user_details": "",
         "secret_question": "",
@@ -149,13 +134,18 @@ def start_session() -> SessionResponse:
         "user_request": "",
         "details_retry_count": 0,
         "agent_messages": [],
-        "log_lines": [f"# Chat Session — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"],
+        "log_lines": [f"# Chat Session — {now.strftime('%Y-%m-%d %H:%M:%S')}\n"],
     }
-    _graph.invoke(initial_state, config=_config(session_id))
+    try:
+        _graph.invoke(initial_state, config=_thread_config(session_id))
+    except Exception:
+        logger.exception("[%s] Failed to initialise session graph", session_id[:8])
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to start session.")
 
+    logger.info("Session created: %s", session_id[:8])
     return SessionResponse(
         session_id=session_id,
-        messages=_drain_new_messages(session_id),
+        messages=_pop_new_messages(session_id),
         done=_is_done(session_id),
     )
 
@@ -168,22 +158,30 @@ def start_session() -> SessionResponse:
 def send_message(session_id: str, body: MessageRequest) -> SessionResponse:
     """Send user input to an active session and receive the agent's reply."""
     if session_id not in _session_shown:
+        logger.warning("send_message: session not found [%s]", session_id[:8])
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
 
     if _is_done(session_id):
+        logger.warning("send_message: session already closed [%s]", session_id[:8])
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="Session is already closed. Start a new session.",
         )
 
-    _graph.invoke(Command(resume=body.message), config=_config(session_id))
+    logger.info("[%s] text message received (%d chars)", session_id[:8], len(body.message))
+    try:
+        _graph.invoke(Command(resume=body.message), config=_thread_config(session_id))
+    except Exception:
+        logger.exception("[%s] graph.invoke failed", session_id[:8])
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error processing message.")
 
     done = _is_done(session_id)
+    _save_log(session_id)
     if done:
-        _save_log(session_id)
+        logger.info("[%s] session completed via text", session_id[:8])
     return SessionResponse(
         session_id=session_id,
-        messages=_drain_new_messages(session_id),
+        messages=_pop_new_messages(session_id),
         done=done,
     )
 
@@ -193,7 +191,7 @@ def send_message(session_id: str, body: MessageRequest) -> SessionResponse:
     dependencies=[Depends(_require_api_key)],
     responses={200: {"content": {"audio/wav": {}}}},
 )
-def send_message_audio(session_id: str, body: MessageRequest) -> StreamingResponse:
+def send_message_get_audio_reply(session_id: str, body: MessageRequest) -> StreamingResponse:
     """Send user input to an active session and receive the agent's reply as a WAV audio file.
 
     Response headers:
@@ -201,20 +199,28 @@ def send_message_audio(session_id: str, body: MessageRequest) -> StreamingRespon
       X-Messages: JSON-encoded list of agent reply text (for display alongside audio).
     """
     if session_id not in _session_shown:
+        logger.warning("send_message_audio: session not found [%s]", session_id[:8])
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
 
     if _is_done(session_id):
+        logger.warning("send_message_audio: session already closed [%s]", session_id[:8])
         raise HTTPException(
             status_code=status.HTTP_410_GONE,
             detail="Session is already closed. Start a new session.",
         )
 
-    _graph.invoke(Command(resume=body.message), config=_config(session_id))
+    logger.info("[%s] text→audio message received (%d chars)", session_id[:8], len(body.message))
+    try:
+        _graph.invoke(Command(resume=body.message), config=_thread_config(session_id))
+    except Exception:
+        logger.exception("[%s] graph.invoke failed (audio)", session_id[:8])
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error processing message.")
 
-    new_messages = _drain_new_messages(session_id)
+    new_messages = _pop_new_messages(session_id)
     done = _is_done(session_id)
+    _save_log(session_id)
     if done:
-        _save_log(session_id)
+        logger.info("[%s] session completed via text→audio", session_id[:8])
 
     # Synthesise all new messages into a single WAV file
     combined_text = " ".join(new_messages)
@@ -243,7 +249,7 @@ def send_message_audio(session_id: str, body: MessageRequest) -> StreamingRespon
     dependencies=[Depends(_require_api_key)],
     responses={200: {"content": {"audio/wav": {}}}},
 )
-def send_voice(
+def voice_round_trip(
     session_id: str,
     audio: UploadFile = File(..., description="Audio file (WAV, MP3, M4A, OGG, FLAC)"),
 ) -> StreamingResponse:
@@ -265,6 +271,7 @@ def send_voice(
             detail="Session is already closed. Start a new session.",
         )
 
+    logger.info("[%s] voice request received (file: %s)", session_id[:8], audio.filename)
     # Save uploaded audio to a temp file for Whisper
     suffix = "." + (audio.filename.rsplit(".", 1)[-1] if audio.filename and "." in audio.filename else "wav")
     tmp_in = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
@@ -272,22 +279,31 @@ def send_voice(
         tmp_in.write(audio.file.read())
         tmp_in.close()
         user_text = transcribe(tmp_in.name)
+    except Exception:
+        logger.exception("[%s] STT transcription failed", session_id[:8])
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Transcription failed.")
     finally:
         os.unlink(tmp_in.name)
 
     if not user_text:
+        logger.warning("[%s] empty transcription result", session_id[:8])
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Could not transcribe audio. Please speak clearly and try again.",
         )
 
-    # Run through the graph with the transcribed text
-    _graph.invoke(Command(resume=user_text), config=_config(session_id))
+    logger.info("[%s] transcribed: %r", session_id[:8], user_text[:80])
+    try:
+        _graph.invoke(Command(resume=user_text), config=_thread_config(session_id))
+    except Exception:
+        logger.exception("[%s] graph.invoke failed (voice)", session_id[:8])
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal error processing message.")
 
-    new_messages = _drain_new_messages(session_id)
+    new_messages = _pop_new_messages(session_id)
     done = _is_done(session_id)
+    _save_log(session_id)
     if done:
-        _save_log(session_id)
+        logger.info("[%s] session completed via voice", session_id[:8])
 
     # Synthesise agent reply to WAV
     combined_text = " ".join(new_messages)

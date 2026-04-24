@@ -47,7 +47,7 @@ class AccountField(str, Enum):
 
 
 class AccountSummary(BaseModel):
-    """Structured representation of a customer account returned by get_account_summary.
+    """Structured representation of a customer account returned by get_account_field.
 
     Fields:
     - account_number: the unique account identifier (e.g. ACC-001).
@@ -62,7 +62,7 @@ class AccountSummary(BaseModel):
 
 
 class AccountResult(BaseModel):
-    """Output of the account type lookup step."""
+    """Parsed result of the bouncer's account lookup: account_type string and a found flag."""
     account_type: str
     found: bool
 
@@ -72,3 +72,17 @@ class SpecialistDecision(BaseModel):
     in_scope: bool
     skill: Optional[Skill] = None
     refusal_message: str = ""
+
+
+# ── API models ────────────────────────────────────────────────────────────────
+
+class MessageRequest(BaseModel):
+    """Request body for text-input endpoints."""
+    message: str
+
+
+class SessionResponse(BaseModel):
+    """Response returned by all session endpoints."""
+    session_id: str
+    messages: list[str]
+    done: bool  # True when the conversation has ended and the session cannot accept more messages

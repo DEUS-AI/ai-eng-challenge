@@ -1,19 +1,3 @@
-"""
-StateGraph definition for DEUS Bank customer support.
-
-Flow:
-  START → greeting → details_input*
-                        └─ greeter_verify [verify_identity 2-of-3]
-                                ├─ no match → reject → END
-                                └─ 2/3 match → secret_question_node → secret_input*
-                                                                          ├─ wrong answer → reject → END
-                                                                          └─ verified → bouncer [verify_account_type]
-                                                                                          ├─ not found → reject → END
-                                                                                          └─ found → request_welcome → request_input*
-                                                                                                        ├─ exit → farewell → END
-                                                                                                        └─ request → specialist → request_input* (loop)
-* = interrupt (waits for human input)
-"""
 import json
 import asyncio
 import operator
@@ -28,13 +12,17 @@ from agents.greeter import greeter_agent
 from agents.bouncer import bouncer_agent
 from agents.specialist import specialist_agent
 from ai.llm import call_google_generative_ai_model
+from config.logger import get_logger
 from config.models import Skill, IdentityResult, AccountResult, SpecialistDecision
 from utils.get_prompts import get_prompt
 from utils.database_queries import verify_secret
 
+logger = get_logger(__name__)
+
 _llm = call_google_generative_ai_model()
 
 def _llm_respond(prompt_key: str) -> str:
+    """Invoke the LLM with a named prompt key and return the trimmed text reply."""
     prompt = get_prompt(prompt_key)
     result = _llm.invoke(prompt)
     return result.content.strip()
@@ -57,6 +45,7 @@ class ChatState(TypedDict):
 # ── Helper ────────────────────────────────────────────────────────────────────
 
 def _call_agent(agent, message: str) -> str:
+    """Invoke a LangChain agent and return the last non-empty content string from the response messages."""
     result = agent.invoke({"messages": [{"role": "user", "content": message}]})
     for msg in reversed(result["messages"]):
         if getattr(msg, "content", None):
@@ -67,6 +56,7 @@ def _call_agent(agent, message: str) -> str:
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
 def greeting(state: ChatState) -> dict:
+    """Run the greeter agent to produce the opening authentication prompt."""
     response = _call_agent(greeter_agent, "Greet the customer and ask for their authentication details.")
     return {
         "agent_messages": [response],
@@ -75,6 +65,7 @@ def greeting(state: ChatState) -> dict:
 
 
 def details_input(state: ChatState) -> dict:
+    """Suspend execution until the customer supplies identifying details (name, phone, or IBAN)."""
     user_input = interrupt("Waiting for customer details")
     return {
         "user_details": user_input.strip(),
@@ -84,6 +75,14 @@ def details_input(state: ChatState) -> dict:
 
 def greeter_verify(state: ChatState) -> dict:
     """Runs greeter_agent with user details, parses tool response to extract secret question."""
+    if not state["user_details"].strip():
+        logger.warning("Empty user_details — treating as no match")
+        return {
+            "identity_verified": False,
+            "secret_question": "",
+            "matched_nif": "",
+            "log_lines": ["\n**[internal greeter_verify]**: {'verified': False, 'secret_question': '', 'matched_nif': ''}"],
+        }
     result = greeter_agent.invoke({
         "messages": [{"role": "user", "content": state["user_details"]}]
     })
@@ -101,8 +100,10 @@ def greeter_verify(state: ChatState) -> dict:
             secret_question=data.get("secret_question", ""),
             matched_nif=data.get("nif", ""),
         )
+        logger.info("Identity details matched — NIF: %s", parsed.matched_nif)
     else:
         parsed = IdentityResult(verified=False)
+        logger.warning("Identity details not matched — input: %r", state["user_details"][:60])
     return {
         "identity_verified": parsed.verified,
         "secret_question": parsed.secret_question,
@@ -115,7 +116,9 @@ _MAX_DETAILS_RETRIES = 2
 
 
 def retry_details(state: ChatState) -> dict:
+    """Increment the failed-authentication counter and re-prompt the customer for their details."""
     attempt = state.get("details_retry_count", 0) + 1
+    logger.warning("Identity match failed — retry %d/%d", attempt, _MAX_DETAILS_RETRIES)
     msg = (
         "I wasn't able to find your details. "
         "Please provide at least two of the following: full name, phone number, or IBAN."
@@ -128,6 +131,7 @@ def retry_details(state: ChatState) -> dict:
 
 
 def secret_question_node(state: ChatState) -> dict:
+    """Emit the security question obtained during the greeter verification step."""
     msg = f"Security question: {state['secret_question']}"
     return {
         "agent_messages": [msg],
@@ -136,6 +140,7 @@ def secret_question_node(state: ChatState) -> dict:
 
 
 def secret_input(state: ChatState) -> dict:
+    """Suspend execution until the customer provides the answer to the security question."""
     answer = interrupt("Waiting for secret answer")
     # Strip whitespace and trailing punctuation added by STT (e.g. "Testing." → "Testing")
     cleaned = answer.strip().rstrip(".,!?;:")
@@ -148,6 +153,10 @@ def secret_input(state: ChatState) -> dict:
 def secret_verify(state: ChatState) -> dict:
     """Verifies the secret answer directly against the database."""
     verified = asyncio.run(verify_secret(state["matched_nif"], state["secret_answer"]))
+    if verified:
+        logger.info("Secret answer verified — NIF: %s", state["matched_nif"])
+    else:
+        logger.warning("Secret answer wrong — NIF: %s", state["matched_nif"])
     return {
         "identity_verified": verified,
         "log_lines": [f"\n**[internal secret_verify]**: {{'verified': {verified}}}"],
@@ -167,6 +176,10 @@ def bouncer(state: ChatState) -> dict:
         account_type=tool_content,
         found="not found" not in tool_content.lower(),
     )
+    if parsed.found:
+        logger.info("Account found — NIF: %s, type: %s", state["matched_nif"], parsed.account_type)
+    else:
+        logger.warning("Account not found — NIF: %s", state["matched_nif"])
     return {
         "account_type": parsed.account_type,
         "log_lines": [f"\n**[internal bouncer]**: {parsed.model_dump()}"],
@@ -174,6 +187,7 @@ def bouncer(state: ChatState) -> dict:
 
 
 def reject(state: ChatState) -> dict:
+    """Generate and emit a polite rejection when identity details cannot be matched."""
     msg = _llm_respond("REJECT_PROMPT")
     return {
         "agent_messages": [msg],
@@ -182,6 +196,7 @@ def reject(state: ChatState) -> dict:
 
 
 def reject_secret(state: ChatState) -> dict:
+    """Generate and emit a polite rejection when the secret answer does not match."""
     msg = _llm_respond("SECRET_REJECT_PROMPT")
     return {
         "agent_messages": [msg],
@@ -190,6 +205,7 @@ def reject_secret(state: ChatState) -> dict:
 
 
 def request_welcome(state: ChatState) -> dict:
+    """Generate and emit the post-authentication welcome message."""
     msg = _llm_respond("REQUEST_WELCOME_PROMPT")
     return {
         "agent_messages": [msg],
@@ -198,6 +214,7 @@ def request_welcome(state: ChatState) -> dict:
 
 
 def request_input(state: ChatState) -> dict:
+    """Suspend execution until the authenticated customer states their service request."""
     user_request = interrupt("Waiting for service request")
     return {
         "user_request": user_request.strip(),
@@ -222,6 +239,7 @@ def _sanitize_user_line(line: str) -> str | None:
     """Return the line if it looks safe, or None to drop it from history."""
     lower = line.lower()
     if any(pat in lower for pat in _INJECTION_PATTERNS):
+        logger.warning("Injection pattern detected and removed from history: %r", line[:80])
         return None
     return line
 
@@ -246,10 +264,7 @@ def specialist(state: ChatState) -> dict:
                 content = safe[len("**You**: "):]
                 turns.append({"role": "user", "content": content})
 
-    # System message is just the prompt (no history block needed)
     history: list[dict] = []
-
-    # Replay previous turns so the model understands the conversational context
     history.extend(turns)
 
     # Append the current request as the final user turn with auth context
@@ -287,6 +302,7 @@ def specialist(state: ChatState) -> dict:
             skill = Skill(skill_value)
         except (ValueError, TypeError):
             skill = None
+        logger.info("Specialist delegating — skill: %s, tool: %s", skill_value, tool_name)
         parsed = SpecialistDecision(in_scope=True, skill=skill)
         employee_name = tool_msg.content
         account_type = state.get("account_type", "regular").lower()
@@ -310,7 +326,7 @@ def specialist(state: ChatState) -> dict:
             "log_lines": [f"\n**Specialist Agent**: {response}"],
         }
     elif tool_msg and final_ai_msg:
-        # Another tool was called (e.g. get_account_summary, log_complaint) —
+        # Another tool was called (e.g. get_account_field, log_complaint) —
         # the LLM already composed a natural-language response after seeing the tool result
         return {
             "agent_messages": [final_ai_msg],
@@ -323,7 +339,6 @@ def specialist(state: ChatState) -> dict:
             "agent_messages": [parsed.refusal_message],
             "log_lines": [f"\n**Specialist Agent**: {parsed.refusal_message}"],
         }
-    # Fallback
     refusal = "I can only assist you with your own banking services."
     parsed = SpecialistDecision(in_scope=False, refusal_message=refusal)
     return {
@@ -333,6 +348,7 @@ def specialist(state: ChatState) -> dict:
 
 
 def farewell(state: ChatState) -> dict:
+    """Emit the closing message and end the session."""
     msg = "Thank you for contacting DEUS Bank. Have a great day! Goodbye!"
     return {
         "agent_messages": [msg],
@@ -343,6 +359,7 @@ def farewell(state: ChatState) -> dict:
 # ── Routing ───────────────────────────────────────────────────────────────────
 
 def route_after_greeter(state: ChatState) -> str:
+    """Route to the secret question, a retry prompt, or a hard reject based on verification outcome."""
     if state.get("secret_question"):
         return "secret_question_node"
     if state.get("details_retry_count", 0) < _MAX_DETAILS_RETRIES:
@@ -351,12 +368,14 @@ def route_after_greeter(state: ChatState) -> str:
 
 
 def route_after_secret_verify(state: ChatState) -> str:
+    """Route to account lookup if the secret answer is correct, otherwise to rejection."""
     if state.get("identity_verified"):
         return "bouncer"
     return "reject_secret"
 
 
 def route_after_bouncer(state: ChatState) -> str:
+    """Route to the request flow if the NIF maps to a known account, otherwise reject."""
     low = state.get("account_type", "").lower()
     if "not found" in low or "not a customer" in low:
         return "reject"
@@ -364,6 +383,7 @@ def route_after_bouncer(state: ChatState) -> str:
 
 
 def route_after_request_input(state: ChatState) -> str:
+    """Route to farewell if the customer signals they are done, otherwise to the specialist."""
     req = state.get("user_request", "").lstrip("\\").lower()
     if req in {"exit", "quit", "sair", "bye", "tchau", "goodbye"}:
         return "farewell"
@@ -373,6 +393,7 @@ def route_after_request_input(state: ChatState) -> str:
 # ── Graph builder ─────────────────────────────────────────────────────────────
 
 def build_graph() -> StateGraph:
+    """Construct and return the uncompiled StateGraph with all nodes and edges wired."""
     builder = StateGraph(ChatState)
 
     builder.add_node("greeting", greeting)
@@ -426,6 +447,7 @@ def build_graph() -> StateGraph:
 
 
 def compile_graph(checkpointer=None):
+    """Compile the graph with an InMemorySaver checkpointer unless one is provided."""
     if checkpointer is None:
         checkpointer = InMemorySaver()
     return build_graph().compile(checkpointer=checkpointer)

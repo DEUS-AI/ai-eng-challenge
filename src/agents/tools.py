@@ -14,8 +14,9 @@ from config.models import Skill, AccountSummary, AccountField
 
 @tool 
 def verify_account_type(nif:str) -> str:
-    """Verify if the customer is a premium, regular customer or not based on NIF. 
-    Return costumer type
+    """Return 'premium' or 'regular' for the account associated with the NIF.
+
+    Returns an error string if no account is found for the given NIF.
     """
     account_type = asyncio.run(get_account_type(nif))
     if account_type:

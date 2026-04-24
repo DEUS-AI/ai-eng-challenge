@@ -239,6 +239,17 @@
     let audioChunks = [];
     let isDone      = false;
 
+    // Shared AudioContext — unlocked on the first user gesture so that
+    // audio.play() called after an async fetch chain is always allowed.
+    let audioCtx = null;
+    function getAudioCtx() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
     // ── tabs ─────────────────────────────────────────────────────────────────
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -358,6 +369,7 @@
 
     talkBtn.addEventListener('click', async () => {
       if (!sessionId || talkBtn.classList.contains('thinking') || isDone) return;
+      getAudioCtx(); // unlock AudioContext while inside a user gesture
       if (!isRecording) await startRecording();
       else stopRecording();
     });
@@ -418,11 +430,17 @@
         if (transcript) addBubble(chatVoice, transcript, 'user');
         messages.forEach(m => addBubble(chatVoice, m, 'agent'));
 
-        const audioBlob = await res.blob();
-        const url = URL.createObjectURL(audioBlob);
-        const audio = new Audio(url);
-        audio.onended = () => URL.revokeObjectURL(url);
-        audio.play().catch(() => {});
+        const arrayBuffer = await res.arrayBuffer();
+        try {
+          const ctx = getAudioCtx();
+          const decoded = await ctx.decodeAudioData(arrayBuffer);
+          const source = ctx.createBufferSource();
+          source.buffer = decoded;
+          source.connect(ctx.destination);
+          source.start();
+        } catch (audioErr) {
+          addBubble(chatVoice, `⚠ Erro ao reproduzir áudio: ${audioErr.message}`, 'system');
+        }
 
         if (done) { markDone(); return; }
       } catch (e) {

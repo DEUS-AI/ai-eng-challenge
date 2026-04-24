@@ -1,9 +1,11 @@
-
-
 from pathlib import Path
 import json
 import aiofiles
 from datetime import datetime
+
+from config.logger import get_logger
+
+logger = get_logger(__name__)
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -14,13 +16,14 @@ complaints_path = str(_DATA_DIR / "complaints.json")
 
 
 async def get_user_by_nif(nif: str):
-    """Fetch user details based on NIF."""
+    """Return the full user record for the given NIF, or None if no match."""
     async with aiofiles.open(user_accounts_path, "r") as f:
         content = await f.read()
     user_accounts = json.loads(content)
     for user in user_accounts:
         if user["nif"] == nif:
             return user
+    logger.warning("User not found — NIF: %s", nif)
     return None
 
 
@@ -37,6 +40,7 @@ async def get_user_by_details(name: str, phone: str, iban: str):
         ])
         if matches >= 2:
             return user
+    logger.warning("User not found by details — name=%r phone=%r iban=%r", name[:20] if name else None, phone, iban)
     return None
 
 
@@ -51,9 +55,8 @@ async def verify_secret(nif: str, answer: str) -> bool:
     return False
 
 
-async def get_account_type(nif:str): 
-
-    """Fetch account type based on NIF."""
+async def get_account_type(nif: str):
+    """Return 'premium' or 'regular' for the account associated with the NIF, or None if not registered."""
     async with aiofiles.open(accounts_type_path, "r") as f:
         content = await f.read()
     accounts = json.loads(content)
@@ -63,11 +66,12 @@ async def get_account_type(nif:str):
                 return 'premium'
             else :
                 return 'regular'
+    logger.warning("Account not found — NIF: %s", nif)
     return None
 
 
 async def get_personalized_employee(skill: str):
-    """Fetch employee details based on skill."""
+    """Return the first employee whose skill set covers the requested skill, or None if no one is available."""
     async with aiofiles.open(employees_path, "r") as f:
         content = await f.read()
     employees = json.loads(content)
@@ -96,7 +100,7 @@ async def get_all_employees():
 
 
 async def append_complaint(nif: str, complaint: str) -> None:
-    """Append a new complaint entry to complaints.json."""
+    """Append a timestamped complaint record to complaints.json, creating the file if it does not exist."""
     try:
         async with aiofiles.open(complaints_path, "r") as f:
             content = await f.read()
@@ -108,5 +112,10 @@ async def append_complaint(nif: str, complaint: str) -> None:
         "complaint": complaint,
         "timestamp": datetime.now().isoformat(),
     })
-    async with aiofiles.open(complaints_path, "w") as f:
-        await f.write(json.dumps(complaints, indent=2))
+    try:
+        async with aiofiles.open(complaints_path, "w") as f:
+            await f.write(json.dumps(complaints, indent=2))
+        logger.info("Complaint logged — NIF: %s", nif)
+    except Exception:
+        logger.exception("Failed to write complaint — NIF: %s", nif)
+        raise

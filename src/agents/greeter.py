@@ -15,13 +15,3 @@ greeter_agent = create_agent(
     tools=[verify_identity],
     system_prompt=GREETER_AGENT_PROMPT,
 )
-
-if __name__ == "__main__":
-    query = "Hello, I need some help with my account."
-
-    for step in greeter_agent.stream(
-        {"messages": [{"role": "user", "content": query}]}
-    ):
-        for update in step.values():
-            for message in update.get("messages", []):
-                message.pretty_print()

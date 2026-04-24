@@ -20,18 +20,3 @@ specialist_agent = create_agent(
     system_prompt=SPECIALIST_AGENT_PROMPT,
 )
 
-if __name__ == "__main__":
-    scenarios = [
-        "I need help with my insurance policy.",
-        "I have questions about my investment portfolio.",
-        "I need assistance with my account.",
-    ]
-
-    for query in scenarios:
-        print(f"\n{'='*60}\nQuery: {query}\n{'='*60}")
-        for step in specialist_agent.stream(
-            {"messages": [{"role": "user", "content": query}]}
-        ):
-            for update in step.values():
-                for message in update.get("messages", []):
-                    message.pretty_print()

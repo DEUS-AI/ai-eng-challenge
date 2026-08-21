@@ -105,7 +105,7 @@ Your submission will be assessed on multiple dimensions that reflect real-world 
 - **CI/CD**
 
 > [!NOTE]
-> This is not an exhaustive checklist—we're interested in seeing how you balance these considerations in building a production-ready system.
+> This is not an exhaustive checklist, we're interested in seeing how you balance these considerations in building a production-ready system.
 
 ---
 

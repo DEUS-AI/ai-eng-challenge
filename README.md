@@ -81,15 +81,14 @@ example_of_account = {
 2.  **💻 Working Code**: Your full implementation, including unit tests for key logic.
 3.  **📄 Pull Request(s)**: Use a GitFlow-style approach to submit your features in one or more PRs.
 4.  **💬 Realistic Commits**: A clean Git history with logical, well-described commits.
-5.  **📤 Submission**: Please commit and push your solution directly to this repository.
+5.  **📤 Submission**: Add the following GitHub handles to the repository that you created from this template: `@felipeVieiraAI` `@Kr4is`.
 
 ![Graph example](lang-graph.png?raw=true "Graph example")
 
----
-
 ## 📋 Evaluation Criteria
 
-**Important**: This challenge is designed to be straightforward to implement. Getting a working solution is the baseline—what we're really evaluating is **how you build it** and **the decisions you make along the way**.
+> [!IMPORTANT]
+> This challenge is designed to be straightforward to implement. Getting a working solution is the baseline—what we're really evaluating is **how you build it** and **the decisions you make along the way**.
 
 Approach this as if you're building something that needs to be **production-ready**. The code should be at a quality level where it could conceptually be deployed to production tomorrow.
 
@@ -105,7 +104,8 @@ Your submission will be assessed on multiple dimensions that reflect real-world 
 - **Git Hygiene**
 - **CI/CD**
 
-*note: This is not an exhaustive checklist—we're interested in seeing how you balance these considerations in building a production-ready system*.
+> [!NOTE]
+> This is not an exhaustive checklist—we're interested in seeing how you balance these considerations in building a production-ready system.
 
 ---
 

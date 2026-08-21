@@ -1,10 +1,10 @@
 # 🤖 AI Engineer Code Challenge
 
-## Instructions for using this template
+## Instructions for Using This Template
 
-instead of forking the template, please use the github button "Use this template" and then select "Create a new repository" with it's visibility in private
+Instead of forking the template, please use the GitHub button "Use this template" and then select "Create a new repository" with its visibility set to **private**.
 
-in this way you will have the complete control of your own repository so as to use proper ci/cd pull request / merge actions. This will be taken into consideration for the challenge
+In this way, you will have complete control of your own repository so as to use proper CI/CD pull request/merge actions. This will be taken into consideration for the challenge.
 
 ## 🎯 Business Requirements
 
@@ -87,6 +87,28 @@ example_of_account = {
 
 ---
 
+## 📋 Evaluation Criteria
+
+**Important**: This challenge is designed to be straightforward to implement. Getting a working solution is the baseline—what we're really evaluating is **how you build it** and **the decisions you make along the way**.
+
+Approach this as if you're building something that needs to be **production-ready**. The code should be at a quality level where it could conceptually be deployed to production tomorrow.
+
+Your submission will be assessed on multiple dimensions that reflect real-world engineering practices:
+
+- **Code Quality & Organization**
+- **Documentation**
+- **Testing Strategy**
+- **Tooling & Automation**
+- **Configuration Management**
+- **Type Safety**
+- **Project Structure**
+- **Git Hygiene**
+- **CI/CD**
+
+*note: This is not an exhaustive checklist—we're interested in seeing how you balance these considerations in building a production-ready system*.
+
+---
+
 ## ✨ Bonus Points
 
 Want to go the extra mile? Consider exploring these optional extensions:
@@ -94,8 +116,5 @@ Want to go the extra mile? Consider exploring these optional extensions:
 - **🗣️ Add a Voice Interface**: Integrate text-to-speech (TTS) and speech-to-text (STT) to give your AI a voice.
 - **🔒 Implement Advanced Guardrails**: Add more sophisticated safety mechanisms to prevent harmful, off-topic, or irrelevant responses.
 - **📚 Incorporate Conversation History**: Give your system memory to allow for more natural, context-aware conversations.
-- **🧪 Add Comprehensive Testing**: Implement a robust testing suite to ensure code quality and reliability.
-- **🚀 Implement CI/CD**: Set up a continuous integration and deployment pipeline to automate testing and releases.
-- **🐳 Dockerize the Application**: Package the solution into a Docker container for easy deployment and scalability.
 
 Now, go forth and build the most epic AI-powered customer support ever! 🚀

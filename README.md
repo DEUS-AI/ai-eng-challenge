@@ -92,20 +92,7 @@ example_of_account = {
 
 Approach this as if you're building something that needs to be **production-ready**. The code should be at a quality level where it could conceptually be deployed to production tomorrow.
 
-Your submission will be assessed on multiple dimensions that reflect real-world engineering practices:
-
-- **Code Quality & Organization**
-- **Documentation**
-- **Testing Strategy**
-- **Tooling & Automation**
-- **Configuration Management**
-- **Type Safety**
-- **Project Structure**
-- **Git Hygiene**
-- **CI/CD**
-
-> [!NOTE]
-> This is not an exhaustive checklist, we're interested in seeing how you balance these considerations in building a production-ready system.
+Your submission will be assessed on multiple dimensions that reflect real-world engineering practices
 
 ---
 
